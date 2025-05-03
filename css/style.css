@@ -1,0 +1,784 @@
+/* Dit-Dah-Dash/css/style.css */
+/* In file: css/style.css */
+/**
+ * css/style.css
+ * -------------
+ * Styling for Dit-Dah-Dash application. Includes results mode adjustments
+ * and styling for results paddles and star ratings.
+ * Updates pattern container width, text display size, and fixed cursor behavior.
+ * Further increases pattern container/SVG size.
+ * Adds correct-pattern styling.
+ * Adds styles for volume slider and speaker icon.
+ * Modifies volume slider to be horizontal.
+ * Reverts layout: Sentence Top, Patterns/Volume Middle.
+ * Adds display area resizing when input area is hidden.
+ * Adds key mapping input styles.
+ * Updates pulse animation to target SVGs within the hint container.
+ * **v2 Changes:**
+ * - Added flex centering to .morse-button.
+ * - Increased #dah-button .paddle-svg height slightly.
+ * - Added .correct-pattern styles for both pattern containers.
+ * **v3 Changes:**
+ * - Added styles for drag-over effect on paddles.
+ * - Added styles for applying background texture to paddles.
+ * - Removed background-color tint and blend-mode when texture is applied.
+ * **v4 Changes:**
+ * - Added pulse animation for the hint pattern container.
+ * **v5 Changes:**
+ * - Added styles for key mapping inputs in settings modal.
+ * - Adjusted display-area height when input-area is hidden.
+ * - Updated pulse animation to target SVGs directly.
+ * **v6 Changes:**
+ * - Refined correct/incorrect feedback styles for clarity.
+ * - Ensured pulse animation color variable is correctly defined and applied.
+ */
+
+/* --- Global Styles & Resets --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    /* Light Mode Variables */
+    --bg-color: #f0f0f0;
+    --text-color: #333;
+    --container-bg: #ffffff;
+    --border-color: #cccccc;
+    --input-area-bg: #e0e0e0;
+    --button-dit-bg: #2196F3;
+    --button-dah-bg: #ff9800;
+    --button-text-color: white;
+    --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --pattern-bg: #eeeeee;
+    --pattern-svg-fill: #555555; /* Default SVG fill */
+    --pattern-correct-bg: #c8e6c9; /* Green background for correct */
+    --pattern-correct-fill: #1b5e20; /* Darker green for correct SVG */
+    --pattern-incorrect-bg: #ffcdd2; /* Red background for incorrect */
+    --pattern-incorrect-fill: #c62828; /* Darker red for incorrect SVG */
+    --pattern-pulse-color: #333333; /* Darker color for pulsing SVG in light mode */
+    --text-display-wrapper-bg: #fdfdfd;
+    --text-display-border: 1px solid #eee;
+    --char-pending-color: var(--text-color);
+    --char-current-bg: #fff59d;
+    --char-current-color: #000;
+    --char-current-shadow: 0 0 0 2px #fdd835;
+    --char-completed-color: #4CAF50;
+    --char-incorrect-bg: #f44336;
+    --char-incorrect-color: white;
+    --stats-bg: #f8f8f8; /* No longer used in game UI */
+    --stats-color: #555; /* Used in results UI */
+    --stats-border: 1px solid #eee;
+    --playback-input-bg: white;
+    --playback-input-border: 1px solid #ccc;
+    --playback-morse-bg: #f8f8f8;
+    --playback-morse-color: #666;
+    --button-primary-bg: #2196F3;
+    --button-primary-hover-bg: #1976D2;
+    --button-secondary-bg: #aaa;
+    --button-secondary-hover-bg: #888;
+    --button-success-bg: #4CAF50;
+    --button-success-hover-bg: #388E3C;
+    --button-reset-bg: #e0e0e0;
+    --button-reset-hover-bg: #d5d5d5;
+    --overlay-bg: rgba(255, 255, 255, 0.98);
+    --overlay-shadow: 0 0 20px rgba(0,0,0,0.1);
+    --level-button-bg: #e0e0e0;
+    --level-button-color: #333;
+    --level-button-hover-bg: #d5d5d5;
+    --level-locked-bg: #f5f5f5;
+    --level-locked-color: #aaa;
+    --level-unlocked-bg: #a5d6a7;
+    --level-unlocked-color: #1b5e20;
+    --level-unlocked-hover-bg: #81c784;
+    --level-completed-bg: #fff59d;
+    --level-completed-color: #3e2723;
+    --level-completed-hover-bg: #ffee58;
+    --hint-toggle-color: #888;
+    --hint-toggle-hover-color: #555;
+    --menu-nav-button-bg: rgba(180, 180, 180, 0.7);
+    --menu-nav-button-hover-bg: rgba(150, 150, 150, 0.9);
+    --menu-nav-button-color: #333;
+    --paddle-label-color: #444;
+    --paddle-label-results-color: var(--button-text-color); /* Use button text color */
+    --star-empty-color: #ccc;
+    --star-filled-color: #ffc107; /* Gold */
+    --volume-slider-track-bg: #ccc;
+    --volume-slider-thumb-bg: #555;
+    --volume-slider-thumb-border: 2px solid var(--container-bg);
+    --speaker-icon-color: var(--hint-toggle-color);
+    --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
+    --key-input-bg: #f8f8f8;
+    --key-input-border: #ccc;
+    --key-input-focus-border: var(--button-primary-bg);
+    --hint-pulse-animation-duration: 1.5s; /* Duration for one pulse */
+}
+
+.dark-mode {
+    /* Dark Mode Variables */
+    --bg-color: #212121;
+    --text-color: #e0e0e0;
+    --container-bg: #333333;
+    --border-color: #555555;
+    --input-area-bg: #424242;
+    --button-dit-bg: #03A9F4;
+    --button-dah-bg: #FFC107;
+    --button-text-color: #212121;
+    --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    --button-active-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    --pattern-bg: #444444;
+    --pattern-svg-fill: #bbbbbb; /* Default SVG fill */
+    --pattern-correct-bg: #2e7d32; /* Dark green background for correct */
+    --pattern-correct-fill: #a5d6a7; /* Light green for correct SVG */
+    --pattern-incorrect-bg: #D32F2F; /* Dark red background for incorrect */
+    --pattern-incorrect-fill: #ffcdd2; /* Light red for incorrect SVG */
+    --pattern-pulse-color: #eeeeee; /* Lighter color for pulsing SVG in dark mode */
+    --text-display-wrapper-bg: #2a2a2a;
+    --text-display-border: 1px solid #444;
+    --char-pending-color: var(--text-color);
+    --char-current-bg: #5c6bc0;
+    --char-current-color: #e8eaf6;
+    --char-current-shadow: 0 0 0 2px #7986cb;
+    --char-completed-color: #81C784;
+    --char-incorrect-bg: #f44336;
+    --char-incorrect-color: white;
+    --stats-bg: #3a3a3a; /* Used in results UI */
+    --stats-color: #bdbdbd; /* Used in results UI */
+    --stats-border: 1px solid #555;
+    --playback-input-bg: #555;
+    --playback-input-border: 1px solid #777;
+    --playback-morse-bg: #444;
+    --playback-morse-color: #ccc;
+    --button-primary-bg: #03A9F4;
+    --button-primary-hover-bg: #29B6F6;
+    --button-secondary-bg: #757575;
+    --button-secondary-hover-bg: #9E9E9E;
+    --button-success-bg: #66BB6A;
+    --button-success-hover-bg: #81C784;
+    --button-reset-bg: #616161;
+    --button-reset-hover-bg: #757575;
+    --overlay-bg: rgba(40, 40, 40, 0.98);
+    --overlay-shadow: 0 0 20px rgba(0,0,0,0.5);
+    --level-button-bg: #616161;
+    --level-button-color: #e0e0e0;
+    --level-button-hover-bg: #757575;
+    --level-locked-bg: #424242;
+    --level-locked-color: #757575;
+    --level-unlocked-bg: #388E3C;
+    --level-unlocked-color: #e8f5e9;
+    --level-unlocked-hover-bg: #4CAF50;
+    --level-completed-bg: #FBC02D;
+    --level-completed-color: #424242;
+    --level-completed-hover-bg: #FFEB3B;
+    --hint-toggle-color: #bdbdbd;
+    --hint-toggle-hover-color: #fff;
+    --menu-nav-button-bg: rgba(80, 80, 80, 0.7);
+    --menu-nav-button-hover-bg: rgba(100, 100, 100, 0.9);
+    --menu-nav-button-color: #e0e0e0;
+    --paddle-label-color: #ccc;
+    --paddle-label-results-color: var(--button-text-color); /* Use button text color */
+    --star-empty-color: #777;
+    --star-filled-color: #ffeb3b; /* Brighter yellow for dark mode */
+    --volume-slider-track-bg: #555;
+    --volume-slider-thumb-bg: #bbb;
+    --volume-slider-thumb-border: 2px solid var(--container-bg);
+    --speaker-icon-color: var(--hint-toggle-color);
+    --paddle-drag-over-border: 3px dashed var(--button-primary-hover-bg);
+    --key-input-bg: #555;
+    --key-input-border: #777;
+    --key-input-focus-border: var(--button-primary-hover-bg);
+}
+
+
+html, body {
+    width: 100%; height: 100%; font-family: 'Roboto Mono', monospace;
+    background-color: var(--bg-color); color: var(--text-color);
+    -webkit-tap-highlight-color: transparent; overflow: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Main Layout --- */
+#game-container { display: flex; flex-direction: column; width: 100%; height: 100%; position: fixed; top: 0; left: 0; }
+#display-area {
+    width: 100%; height: 80%; /* Default height when paddles are shown */
+    display: flex; flex-direction: column; /* Children stack vertically */
+    padding: 10px 15px; position: relative;
+    background-color: var(--container-bg);
+    border-bottom: 2px solid var(--border-color); overflow: hidden;
+    transition: background-color 0.3s ease, border-color 0.3s ease, height 0.3s ease;
+}
+/* When input area is hidden, display area takes full height */
+body.input-area-hidden #display-area {
+    height: 100%;
+    border-bottom: none;
+}
+
+
+#input-area {
+    width: 100%; height: 20%; /* Default height */
+    display: flex; justify-content: space-between;
+    align-items: stretch; padding: 15px; gap: 15px; background-color: var(--input-area-bg);
+    transition: background-color 0.3s ease, height 0.3s ease;
+}
+
+#top-spacer {
+    height: 70px; /* Approximate height of patterns + volume + margins */
+    flex-shrink: 0; /* Prevent it from shrinking */
+    width: 100%;   /* Take full width */
+    /* background-color: rgba(255, 0, 0, 0.1); /* Optional: for debugging layout */
+}
+/* --- Menu Navigation Button --- */
+.menu-nav-button {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 30; /* Above overlays but below modal */
+    background-color: var(--menu-nav-button-bg);
+    color: var(--menu-nav-button-color);
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 1.1em;
+    font-family: 'Roboto Mono', monospace;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.menu-nav-button:hover {
+    background-color: var(--menu-nav-button-hover-bg);
+}
+
+/* --- Game Mode UI Wrapper --- */
+#game-ui-wrapper {
+    display: flex;
+    flex-direction: column; /* Stack children vertically */
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+
+/* --- Input Buttons (Main Paddles) --- */
+.morse-button {
+    flex-grow: 1; flex-basis: 45%; max-width: 48%; font-weight: bold; border: none;
+    border-radius: 15px; cursor: pointer; color: var(--button-text-color); box-shadow: var(--button-shadow);
+    transition: background-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease, border 0.2s ease, background-image 0.2s ease; /* Added background-image transition */
+    /* Flexbox centering for content (SVG + Label) */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
+    height: 100%; padding: 10px; overflow: hidden; position: relative; /* For absolute positioning label if needed */
+
+    /* Texture Properties */
+    background-size: cover;       /* Cover the entire button */
+    background-position: center;  /* Center the image */
+    background-repeat: no-repeat; /* Don't repeat the image */
+}
+
+/* Drag-over indication */
+.morse-button.drag-over {
+    border: var(--paddle-drag-over-border);
+    filter: brightness(1.1); /* Slightly lighten */
+}
+
+
+/* Ensure SVG/Label are visible over texture */
+.morse-button .paddle-svg,
+.morse-button .paddle-label {
+    position: relative; /* Ensure they are above the background */
+    z-index: 1;
+}
+
+/* Hide SVG by default when results label is active */
+.morse-button.results-label-active .paddle-svg {
+    display: none;
+}
+.morse-button .paddle-svg { /* Style for the SVG when normally visible */
+    width: 20%; max-height: 40%; /* Relative to button height */
+    min-height: 25px; fill: currentColor;
+    pointer-events: none; flex-shrink: 0;
+    /* margin-bottom: -36px; /* REMOVED negative margin */
+    transition: display 0s; /* Instant transition for display property */
+}
+
+
+/* Slightly increased dah height */
+#dah-button .paddle-svg {
+    max-height: 45%; /* Slightly larger max height for dah */
+    width: 24%; /* Make Dah slightly wider */
+}
+
+.paddle-label {
+    font-size: 1.6em; /* Make label larger for results */
+    color: var(--paddle-label-color);
+    /* margin-top: 4px; /* REMOVED fixed margin top */
+    text-align: center;
+    white-space: nowrap;
+    min-height: 1.2em; /* Reserve space */
+    width: 100%;
+    transition: color 0.3s ease;
+}
+/* Style for results paddle label */
+.morse-button.results-label-active .paddle-label {
+    font-weight: bold;
+    font-style: italic;
+    color: var(--paddle-label-results-color); /* Distinct color for results */
+    font-size: 1.8em; /* Even larger */
+}
+/* Base Background Colors (used when NO texture applied) */
+#dit-button { background-color: var(--button-dit-bg); }
+#dah-button { background-color: var(--button-dah-bg); }
+
+.morse-button:active, .morse-button.active { transform: scale(0.97); box-shadow: var(--button-active-shadow); filter: brightness(0.9); }
+.morse-button:disabled {
+    filter: grayscale(60%);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+.morse-button:disabled .paddle-label {
+    color: #aaa; /* Dim label when disabled */
+}
+
+
+/* --- Text Display (Game Mode - Top) --- */
+#text-display-wrapper {
+    display: flex; align-items: center;
+    padding: 10px 0;
+    overflow-x: hidden; /* Disable user scrolling */
+    overflow-y: hidden; line-height: 1.3;
+    width: 100%; /* Take full width */
+    max-width: 98%; /* Small horizontal padding */
+    margin: 5px auto; /* Adjust margin */
+    border: var(--text-display-border); border-radius: 8px; background-color: var(--text-display-wrapper-bg);
+    transition: background-color 0.3s ease, border-color 0.3s ease; position: relative;
+    /* Cursor indicates text is not directly interactable */
+    cursor: default;
+    flex-grow: 1; /* Allow text display to take up available space */
+    min-height: 100px; /* Ensure minimum height */
+    flex-shrink: 1; /* Allow shrinking if needed */
+}
+#text-display {
+    font-size: 4em; /* Increase base font size slightly */
+    white-space: nowrap; text-align: left;
+    width: max-content; /* Allow text to determine width */
+    max-width: none; /* No max-width on the text itself */
+    /* Padding adds space so first/last chars can be centered */
+    padding-left: 50%;
+    padding-right: 50%;
+    /* vertical-align: middle; - less relevant with flex */
+    /* Centering is handled by JS scroll */
+    will-change: transform; /* Hint for smoother scrolling */
+}
+.char { display: inline-block; transition: background-color 0.2s ease, color 0.2s ease; border-radius: 3px; padding: 0 0.05em; margin: 0 0.02em; vertical-align: middle; }
+.char.pending { color: var(--char-pending-color); }
+.char.current { background-color: var(--char-current-bg); color: var(--char-current-color); box-shadow: var(--char-current-shadow); font-weight: bold; }
+.char.completed { color: var(--char-completed-color); font-weight: bold; }
+.char.incorrect { color: var(--char-incorrect-color); background-color: var(--char-incorrect-bg); animation: shake 0.3s ease-in-out; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.char.space { display: inline-block; min-width: 0.4em; }
+
+/* --- Pattern Displays (Game Mode - Middle) --- */
+#target-pattern-outer-wrapper {
+    position: relative; /* Keep relative for hint toggle positioning */
+    width: 95%; /* Further widen */
+    max-width: 550px; /* Further widen max */
+    margin: 10px auto 5px auto; /* Top margin */
+    flex-shrink: 0; /* Don't shrink */
+}
+.pattern-container {
+    width: 100%;
+    min-height: 55px; /* Increase min-height for larger SVGs */
+    padding: 8px 12px; /* Increase padding */
+    background-color: var(--pattern-bg);
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px; /* Increase gap */
+    transition: background-color 0.15s ease-in-out;
+    position: relative;
+}
+#user-pattern-container {
+    margin: 5px auto 5px auto; /* Reduce bottom margin */
+    flex-shrink: 0; /* Don't shrink */
+    width: 95%; /* Further widen */
+    max-width: 550px; /* Further widen max */
+}
+
+/* Base SVG styles */
+.pattern-container svg {
+    width: 28px;  /* Larger size */
+    height: 28px; /* Larger size */
+    fill: var(--pattern-svg-fill); /* Use default fill */
+    transition: fill 0.15s ease-in-out, visibility 0s, transform 0.3s ease-in-out;
+}
+.pattern-container svg.pattern-dah {
+    width: 42px; /* Larger size (maintain ratio) */
+}
+
+/* CORRECT Feedback Styles */
+.pattern-container.correct-pattern {
+    background-color: var(--pattern-correct-bg); /* Green BG */
+}
+/* Target SVGs *inside* the correct container */
+.pattern-container.correct-pattern svg {
+    fill: var(--pattern-correct-fill); /* Green SVG fill */
+}
+
+/* INCORRECT Feedback Styles */
+.pattern-container.incorrect-pattern {
+    background-color: var(--pattern-incorrect-bg); /* Red BG */
+}
+/* Target SVGs *inside* the incorrect container */
+.pattern-container.incorrect-pattern svg {
+    fill: var(--pattern-incorrect-fill); /* Red SVG fill */
+}
+
+/* Hint Pulse Animation for SVGs */
+@keyframes svg-pulse-animation {
+    0% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Start with default fill */
+    50% { transform: scale(1.1); fill: var(--pattern-pulse-color); } /* Scale up and change to pulse color */
+    100% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Return to default fill */
+}
+
+/* Apply animation to SVGs inside the target container when the class is added by JS */
+#target-pattern-container svg.hint-svg-pulse {
+    animation: svg-pulse-animation var(--hint-pulse-animation-duration) ease-in-out infinite;
+}
+
+
+/* Hint Visibility Styles */
+.hint-toggle { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); background: none; border: none; padding: 0 3px; cursor: pointer; color: var(--hint-toggle-color); line-height: 0; transition: color 0.2s ease; z-index: 5; }
+.hint-toggle:hover { color: var(--hint-toggle-hover-color); }
+.hint-toggle svg { width: 1.4em; height: 1.4em; stroke: currentColor; vertical-align: middle; }
+#target-pattern-outer-wrapper > .hint-toggle > svg { display: none; }
+#target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle > svg.icon-visible { display: inline-block; }
+#target-pattern-outer-wrapper.hint-hidden > .hint-toggle > svg.icon-hidden { display: inline-block; }
+#target-pattern-outer-wrapper.hint-hidden #target-pattern-container svg { visibility: hidden; } /* Target only hint container */
+
+
+/* --- Volume Control Area (Horizontal - Middle) --- */
+#volume-control-area {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center items horizontally */
+    gap: 15px; /* Increased gap */
+    width: 60%; /* Adjust width as needed */
+    max-width: 350px; /* Max width */
+    margin: 5px auto 10px auto; /* Center block and add margin */
+    padding: 5px;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+#volume-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%; /* Take full width of its space in the flex container */
+    height: 10px; /* Horizontal slider height */
+    background: var(--volume-slider-track-bg); /* Track background */
+    border-radius: 5px; /* Rounded track */
+    cursor: pointer;
+    flex-grow: 1; /* Allow slider to take up available space */
+    order: 1; /* Slider first */
+}
+
+/* Horizontal Slider Thumb Styling */
+#volume-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px; /* Thumb size */
+    height: 20px; /* Thumb size */
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%; /* Round thumb (dit-like) */
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+    margin-top: -5px; /* Adjust vertical centering if needed */
+}
+
+#volume-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%;
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+}
+
+#volume-slider::-ms-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--volume-slider-thumb-bg);
+    border-radius: 50%;
+    border: var(--volume-slider-thumb-border);
+    cursor: pointer;
+    margin-top: 0px; /* Adjust vertical centering if needed for Edge */
+}
+
+/* Horizontal Slider Track Styling (Optional but good practice) */
+#volume-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 10px;
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+#volume-slider::-moz-range-track {
+    width: 100%;
+    height: 10px;
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+#volume-slider::-ms-track {
+    width: 100%;
+    height: 10px;
+    background: transparent; /* IE needs transparent track */
+    border-color: transparent;
+    color: transparent;
+}
+#volume-slider::-ms-fill-lower,
+#volume-slider::-ms-fill-upper {
+    background: var(--volume-slider-track-bg);
+    border-radius: 5px;
+}
+
+
+#speaker-icon {
+    width: 32px; /* Increased from 28px */
+    height: 32px; /* Increased from 28px */
+    flex-shrink: 0; /* Prevent speaker from shrinking */
+    order: 2; /* Speaker second (to the right) */
+}
+#speaker-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: var(--speaker-icon-color);
+    transition: stroke 0.3s ease;
+    /* Ensure SVG doesn't overflow its container */
+    display: block; /* Helps prevent extra space below inline SVGs */
+    overflow: visible; /* Allow parts like waves to potentially draw slightly outside if needed, though increasing container size is preferred */
+}
+
+
+/* Waves are hidden by default in HTML, shown via JS */
+#speaker-icon svg path[id^="speaker-wave-"] {
+    transition: display 0s; /* Immediate show/hide */
+}
+
+
+
+
+/* --- Stats Display (Removed from Game UI, only in Results) --- */
+#stats-display {
+    display: none; /* Hide by default */
+}
+
+/* --- Playback & Sandbox Areas --- */
+#playback-area, #sandbox-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; flex-grow: 1; overflow-y: auto; width: 100%; height: 100%; position: relative; }
+#playback-area h2, #sandbox-area h2 { color: var(--text-color); margin-bottom: 10px; }
+#playback-area label, #sandbox-area label { font-size: 1.1em; margin-bottom: -10px; color: var(--text-color); }
+#playback-input, #sandbox-input { font-family: 'Roboto Mono', monospace; font-size: 1.3em; padding: 8px 12px; border: var(--playback-input-border); border-radius: 6px; width: 80%; max-width: 500px; text-align: center; background-color: var(--playback-input-bg); color: var(--text-color); transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+#play-sentence-button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; border: none; border-radius: 8px; background-color: var(--button-success-bg); color: var(--button-text-color); transition: background-color 0.2s ease; }
+#play-sentence-button:hover:not(:disabled) { background-color: var(--button-success-hover-bg); }
+#play-sentence-button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
+#start-sandbox-button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; border: none; border-radius: 8px; background-color: var(--button-primary-bg); color: var(--button-text-color); transition: background-color 0.2s ease; }
+#start-sandbox-button:hover:not(:disabled) { background-color: var(--button-primary-hover-bg); }
+#start-sandbox-button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
+#playback-morse-display, #sandbox-morse-preview { font-family: 'Courier New', Courier, monospace; font-size: 1.1em; color: var(--playback-morse-color); margin-top: 10px; word-break: break-all; background-color: var(--playback-morse-bg); padding: 5px 10px; border-radius: 4px; max-width: 90%; min-height: 1.5em; transition: background-color 0.3s ease, color 0.3s ease; }
+
+/* --- Overlays (Main Menu, Results, Level Select) --- */
+.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--overlay-bg); z-index: 20; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 20px; padding-top: 50px; text-align: center; box-shadow: var(--overlay-shadow); overflow-y: auto; font-size: 1.4em; color: var(--text-color); transition: background-color 0.3s ease; position: relative; }
+.overlay h2 { margin-bottom: 20px; margin-top: 10px; color: var(--text-color); font-size: 1.8em; flex-shrink: 0; }
+.overlay p { margin-bottom: 15px; font-size: 1.2em; /* Slightly smaller base p */ color: var(--text-color); opacity: 0.9; flex-shrink: 0; }
+.overlay small { font-size: 1.0em; color: var(--text-color); opacity: 0.7; display: block; margin-bottom: 15px; flex-shrink: 0; }
+.overlay > div { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; flex-shrink: 0; }
+.overlay button:not(.menu-nav-button) { padding: 12px 24px; font-size: 1.3em; cursor: pointer; border: none; border-radius: 8px; background-color: var(--button-primary-bg); color: var(--button-text-color); margin: 5px; transition: background-color 0.2s ease; min-width: 140px; flex-shrink: 0; }
+.overlay button:not(.menu-nav-button):hover:not(:disabled) { background-color: var(--button-primary-hover-bg); }
+.overlay button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Main Menu Specifics */
+#main-menu-overlay { justify-content: center; padding-top: 20px; }
+#main-menu-overlay .menu-nav-button { display: none; }
+#main-menu-overlay div { display: flex; flex-direction: column; align-items: center; width: 100%; }
+#main-menu-overlay button { width: 70%; max-width: 300px; margin: 10px 0; }
+#show-settings-button { background-color: var(--button-secondary-bg); }
+#show-settings-button:hover { background-color: var(--button-secondary-hover-bg); }
+
+/* Level Selection Specifics */
+#level-selection-screen h2 { margin-bottom: 15px; }
+#level-list { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 20px; width: 90%; max-width: 500px; padding: 10px; border-radius: 8px; flex-shrink: 0; }
+#level-list button { padding: 12px 15px; font-size: 1.2em; border: none; border-radius: 6px; transition: background-color 0.2s ease, transform 0.1s ease, color 0.2s ease; margin: 0; width: 100%; text-align: center; box-sizing: border-box; }
+#level-list button:hover:not(:disabled) { transform: scale(1.01); }
+#level-list button.locked { background-color: var(--level-locked-bg); color: var(--level-locked-color); cursor: not-allowed; opacity: 0.7; }
+#level-list button.unlocked { background-color: var(--level-unlocked-bg); color: var(--level-unlocked-color); }
+#level-list button.unlocked:hover:not(:disabled) { background-color: var(--level-unlocked-hover-bg); }
+#level-list button.completed { background-color: var(--level-completed-bg); color: var(--level-completed-color); }
+#level-list button.completed:hover:not(:disabled) { background-color: var(--level-completed-hover-bg); }
+#level-list button:disabled { pointer-events: none; }
+
+/* Results Screen Specifics */
+#results-screen {
+    overflow-y: hidden; /* Prevent vertical scrolling on the overlay */
+}
+
+#results-screen h2 {
+    margin-bottom: 10px;
+    overflow: hidden; /* Hide overflow on h2 */
+}
+#results-rating { margin-bottom: 15px; }
+#results-stats { margin-bottom: 10px; }
+#results-stats p {
+    font-size: 1.2em;
+    margin-bottom: 5px;
+    color: var(--stats-color); /* Apply stats color */
+}
+#level-unlock-message { color: var(--char-completed-color); font-weight: bold; margin-bottom: 15px; font-size: 1.1em; min-height: 1.4em; /* Reserve space */ }
+#results-screen .results-instructions {
+    font-size: 1.0em;
+    opacity: 0.8;
+    margin-bottom: 10px;
+    overflow: hidden; /* Hide overflow on instructions */
+}
+#results-screen .results-instructions .key-hint {
+    display: inline-block;
+    padding: 0 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background-color: var(--container-bg);
+    font-weight: bold;
+    font-size: 0.9em;
+}
+#results-screen div:last-of-type {
+    margin-top: 10px; /* Increased margin */
+    overflow: hidden; /* Hide overflow on the button container */
+} /* Spacing for bottom buttons */
+/* Star Rating */
+.star-rating {
+    font-size: 2.5em; /* Adjust size */
+    color: var(--star-empty-color);
+    display: inline-block; /* Or flex */
+    margin-bottom: 15px;
+}
+.star {
+    cursor: default; /* Indicate they are not interactive */
+    transition: color 0.2s ease-in-out;
+    padding: 0 2px;
+}
+.star.filled {
+    color: var(--star-filled-color);
+}
+
+/* --- Settings Key Mapping Styles --- */
+.key-mapping-row {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+    width: 100%;
+}
+
+/* Override general modal label styles */
+.key-mapping-row label {
+    width: auto !important;
+    display: inline !important;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    min-width: 70px;
+    text-align: right;
+}
+
+.key-input {
+    padding: 6px 10px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1em;
+    text-align: center;
+    border: 1px solid var(--key-input-border);
+    border-radius: 4px;
+    background-color: var(--key-input-bg);
+    color: var(--text-color);
+    width: 90px;
+    min-width: 70px;
+    max-width: 120px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.3s ease, color 0.3s ease;
+    text-transform: uppercase;
+}
+
+.key-input:focus {
+    outline: none;
+    border-color: var(--key-input-focus-border);
+    box-shadow: 0 0 0 2px var(--button-primary-hover-bg);
+}
+
+.key-input.listening {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* --- End Settings Key Mapping Styles --- */
+
+
+/* --- Utility Classes --- */
+.hidden { display: none !important; }
+
+/* --- Responsive Adjustments --- */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+    #top-spacer { display: none;}
+    #display-area { height: 58%; padding: 5px 10px; }
+    #input-area { height: 48%; padding: 10px; gap: 10px; }
+    #text-display-wrapper { max-width: 95%; margin: 3px auto; padding: 48px 0; line-height: 1.2; min-height: 60px; }
+    #target-pattern-outer-wrapper, #user-pattern-container { width: 90%; max-width: 400px; margin: 4px auto; } /* Adjust landscape max width */
+    .pattern-container { min-height: 40px; padding: 3px 8px; gap: 3px; } /* Adjust landscape height/padding */
+    .pattern-container svg { width: 20px; height: 20px; } /* Adjust landscape svg size */
+    .pattern-container svg.pattern-dah { width: 30px; } /* Adjust landscape dah size */
+    #stats-display { font-size: 1.0em; padding: 4px 0; gap: 5px 10px; }
+    #stats-display > div { padding: 3px 6px; }
+    .hint-toggle svg { width: 1.2em; height: 1.2em; }
+    .hint-toggle { right: 2px; padding: 0 2px; }
+    .morse-button .paddle-svg { min-height: 10px; /* Removed margin-bottom */ }
+    .paddle-label { font-size: 0.8em; /* Removed margin-top */ }
+    .morse-button.results-label-active .paddle-label { font-size: 1.5em; }
+    .menu-nav-button { font-size: 1.0em; padding: 4px 8px; top: 5px; left: 5px; }
+    .overlay { padding-top: 40px; }
+    .star-rating { font-size: 2em; margin-bottom: 10px;}
+    #results-stats p { font-size: 1em; margin-bottom: 3px;}
+    #results-screen .results-instructions { font-size: 0.9em; }
+    /* Volume Landscape */
+    #volume-slider {display: none; } /* Hide volume slider in landscape */
+    #speaker-icon { display: none; } /* Hide speaker icon in landscape */
+    .menu-nav-button { display: none; }
+}
+/* Very Small Screens (e.g., small phones) */
+@media (max-width: 360px) {
+    #top-spacer { display: none; }
+    #stats-display { font-size: 1.1em; }
+    #text-display { font-size: 3.5em; } /* Slightly smaller on tiny screens */
+    #level-list button { font-size: 1.1em; padding: 10px 12px; }
+    .morse-button.results-label-active .paddle-label { font-size: 1.6em; }
+    #target-pattern-outer-wrapper, #user-pattern-container { width: 95%; max-width: none; } /* Take more width, remove max */
+    .pattern-container svg { width: 24px; height: 24px; } /* Adjust small screen svg size */
+    .pattern-container svg.pattern-dah { width: 36px; } /* Adjust small screen dah size */
+    .pattern-container { min-height: 50px; gap: 4px; } /* Adjust small screen height/gap */
+    /* Volume Small Screen */
+    #volume-control-area { width: 70%; max-width: 250px; gap: 10px; margin: 3px auto 5px auto; } /* Slightly more gap */
+    #volume-slider { height: 8px; }
+    #volume-slider::-webkit-slider-thumb, #volume-slider::-moz-range-thumb, #volume-slider::-ms-thumb { width: 16px; height: 16px; margin-top: -4px; }
+    #speaker-icon { width: 28px; height: 28px; }
+
+    /* Hide game menu button */
+    .menu-nav-button { display: none; }
+}
+
+/* Ensure modal content allows its children to determine layout */
+.modal-content > * {
+     max-width: 100%; /* Prevent overflow */
+}
+/* Explicitly set width for elements that should span */
+.modal-content input[type="range"],
+.modal-content .settings-toggle-row,
+.modal-content button {
+    width: 100%;
+}
