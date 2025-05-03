@@ -3,8 +3,8 @@
  * js/config.js
  * --------------
  * Global configuration settings for the Dit-Dah-Dash game.
- * Includes Morse code mappings, level data, timing defaults, audio defaults, storage keys, and UI settings.
- * Removed hardcoded default keybindings; these will be managed dynamically via settings.
+ * Includes Morse code mappings, level data, timing defaults, audio defaults,
+ * storage keys, UI settings, and keybinding/paddle mode settings.
  */
 
 // --- Morse Code Mapping ---
@@ -329,6 +329,12 @@ const getKeyDisplay = (key) => {
     return KEYBIND_DISPLAY_MAP[key] || key.toUpperCase();
 };
 
+// --- Paddle Input Mode ---
+// Default mode: false = Automatic (Iambic/Repeat), true = Manual
+const PADDLE_MODE_DEFAULTS = {
+    ditManual: false,
+    dahManual: false
+};
 
 // --- Local Storage Keys ---
 const STORAGE_KEY_PREFIX = 'ditDahDash_';
@@ -339,10 +345,13 @@ const STORAGE_KEY_SETTINGS_SOUND = `${STORAGE_KEY_PREFIX}settingsSound`;
 const STORAGE_KEY_SETTINGS_DARK_MODE = `${STORAGE_KEY_PREFIX}settingsDarkMode`;
 const STORAGE_KEY_SETTINGS_FREQUENCY = `${STORAGE_KEY_PREFIX}settingsFrequency`;
 const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`;
-const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`; // New key for Dit binding
-const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`; // New key for Dah binding
+const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`;
+const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`;
 const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`;
 const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`;
+// New keys for Manual Mode
+const STORAGE_KEY_SETTINGS_DIT_MANUAL = `${STORAGE_KEY_PREFIX}settingsDitManual`;
+const STORAGE_KEY_SETTINGS_DAH_MANUAL = `${STORAGE_KEY_PREFIX}settingsDahManual`;
 
 
 // --- UI ---
@@ -372,10 +381,11 @@ window.MorseConfig = {
     // Scoring
     INCORRECT_ATTEMPT_PENALTY,
 
-    // Keybindings
+    // Keybindings & Paddle Mode
     KEYBINDING_DEFAULTS,
     KEYBIND_DISPLAY_MAP,
     getKeyDisplay,
+    PADDLE_MODE_DEFAULTS, // Export paddle mode defaults
 
     // Storage Keys
     STORAGE_KEY_PREFIX, // Export prefix for potential other uses
@@ -386,6 +396,8 @@ window.MorseConfig = {
     STORAGE_KEY_SETTINGS_DIT_KEY, STORAGE_KEY_SETTINGS_DAH_KEY,
     STORAGE_KEY_SETTINGS_HINT_VISIBLE,
     STORAGE_KEY_PADDLE_TEXTURES,
+    STORAGE_KEY_SETTINGS_DIT_MANUAL, // Export manual mode keys
+    STORAGE_KEY_SETTINGS_DAH_MANUAL,
 
     // UI Feedback & Defaults
     INCORRECT_FLASH_DURATION,
@@ -406,4 +418,15 @@ window.getCurrentKeybindings = () => {
     }
 
     return { dit: ditKey, dah: dahKey };
+};
+
+// Function to get current manual mode settings
+window.getCurrentManualMode = () => {
+    const ditManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
+    const dahManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
+
+    const ditManual = ditManualSaved !== null ? JSON.parse(ditManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
+    const dahManual = dahManualSaved !== null ? JSON.parse(dahManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+
+    return { ditManual, dahManual };
 };

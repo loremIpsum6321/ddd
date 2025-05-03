@@ -1,7 +1,18 @@
+/* Dit-Dah-Dash/js/uiManager.js */
+/* In file: js/uiManager.js */
+/**
+ * js/uiManager.js
+ * -----------------
+ * Manages the user interface, including DOM element references, UI updates,
+ * view transitions, settings loading/saving/application, and event binding.
+ * Handles feedback display, text rendering, hint visibility, paddle textures,
+ * key mapping UI, and manual mode UI.
+ */
 class UIManager {
     /**
      * Initializes the UIManager by getting references to key DOM elements.
-     * Loads textures, settings, and binds drag/drop events.
+     * Loads textures, settings (including key mappings and manual mode),
+     * and binds drag/drop events.
      */
     constructor() {
         // Core Containers / Wrappers
@@ -27,7 +38,7 @@ class UIManager {
         this.targetPatternOuterWrapper = document.getElementById('target-pattern-outer-wrapper');
         this.toggleHintButton = document.getElementById('toggle-hint-button');
         this.userPatternContainer = document.getElementById('user-pattern-container');
-        this.statsDisplay = document.getElementById('stats-display');
+        this.statsDisplay = document.getElementById('stats-display'); // Note: Currently hidden via CSS
         this.timerDisplay = document.getElementById('timer-display');
         this.wpmDisplay = document.getElementById('wpm-display');
         this.accuracyDisplay = document.getElementById('accuracy-display');
@@ -72,6 +83,10 @@ class UIManager {
         // Key Mapping Inputs
         this.ditKeyInput = document.getElementById('dit-key-input');
         this.dahKeyInput = document.getElementById('dah-key-input');
+        // Manual Mode Toggles
+        this.ditManualModeToggle = document.getElementById('dit-manual-mode-toggle');
+        this.dahManualModeToggle = document.getElementById('dah-manual-mode-toggle');
+
 
         // Overlay Screens
         this.resultsScreen = document.getElementById('results-screen');
@@ -105,14 +120,16 @@ class UIManager {
         this.isSoundEnabled = true;
         this.isDarkModeEnabled = false;
         this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
-        this.isControlHeld = false;
-        this.hintWasVisibleBeforePeek = false;
+        this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
+        this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+        this.isControlHeld = false; // For hint peek
+        this.hintWasVisibleBeforePeek = false; // For hint peek restore
         this.keyInputCurrentlyListening = null; // 'dit', 'dah', or null
 
         // --- Separate Timeouts for feedback ---
         this._incorrectFlashTimeout = null; // Character flash
         this._incorrectPatternTimeout = null; // Pattern bg/fill flash (incorrect)
-        this._correctFlashTimeout = null; // Pattern bg/fill flash (correct)
+        this._correctFlashTimeout = null; // Pattern bg/fill flash (correct) - RENAMED from correct-flash
         this._hintPulseTimer = null; // Hint SVG pulse start delay
         // --- End Separate Timeouts ---
 
@@ -123,30 +140,16 @@ class UIManager {
         // Paddle Texture URLs
         this.paddleTextures = { dit: null, dah: null };
 
+        // Callbacks placeholder
+        this.callbacks = {};
 
         // Initial Setup
         this._loadSettings();
         this._loadPaddleTextures();
-        this._updateWpmDisplay(this.currentWpm);
-        this._updateFrequencyDisplay(this.currentFrequency);
-        this._updateVolumeSliderUI(this.currentVolume);
-        this._updateSpeakerIcon(this.currentVolume);
-        this._updateKeyMappingDisplay();
+        this._updateAllSettingsDisplays(); // Update UI based on loaded settings
         this._applyDarkMode(this.isDarkModeEnabled);
-        this._applyHintVisibility(this.isHintVisible, false);
-        if (this.soundToggle) this.soundToggle.checked = this.isSoundEnabled;
-        if (this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled;
-        if (this.frequencySlider) {
-            this.frequencySlider.min = MorseConfig.AUDIO_MIN_FREQUENCY;
-            this.frequencySlider.max = MorseConfig.AUDIO_MAX_FREQUENCY;
-            this.frequencySlider.value = this.currentFrequency;
-        }
-        if (this.wpmSlider) {
-            this.wpmSlider.value = this.currentWpm;
-        }
-        if (this.volumeSlider) {
-            this.volumeSlider.value = this.currentVolume;
-        }
+        this._applyHintVisibility(this.isHintVisible, false); // Apply initial hint state without pulse
+
         this._addGlobalEventListeners();
         this._addDragDropListeners();
         console.log("UIManager Initialized");
@@ -175,8 +178,8 @@ class UIManager {
          this._hideAllViews();
          this.gameUiWrapper?.classList.remove('hidden');
          this.inputArea?.classList.remove('hidden');
-         this._applyHintVisibility(this.isHintVisible, false);
-         this.updatePaddleLabels('game');
+         this._applyHintVisibility(this.isHintVisible, false); // Restore hint state
+         this.updatePaddleLabels('game'); // Set default game paddle labels
          console.log("UI: Showing Game/Sandbox Interface");
          this._updateDisplayAreaSizing();
     }
@@ -212,7 +215,7 @@ class UIManager {
         }
         console.log("UI: Level Selection Screen element found, populating list...");
 
-        this.levelListContainer.innerHTML = '';
+        this.levelListContainer.innerHTML = ''; // Clear previous list
         levelsWithStatus.forEach(level => {
              const button = document.createElement('button');
              button.textContent = `Level ${level.id}: ${level.name}`;
@@ -245,37 +248,48 @@ class UIManager {
 
     /** Shows the results overlay and configures UI elements for results mode. */
     showResultsScreen(scores, unlockedLevelId, hasNextLevelOption, mode) {
-        this._hideAllViews();
-        this.resultsScreen?.classList.remove('hidden');
-        this.inputArea?.classList.remove('hidden');
+        this._hideAllViews(); // Hide game UI etc.
+        this.resultsScreen?.classList.remove('hidden'); // Show results overlay
+        this.inputArea?.classList.remove('hidden'); // Keep paddles visible
 
         if (!this.resultsScreen) return;
+
+        // Populate score details
         this.resultsTime.textContent = `Time: ${scores.elapsedTimeSeconds.toFixed(1)}s`;
         this.resultsNetWpm.textContent = `Net WPM: ${scores.netWpm.toFixed(1)}`;
         this.resultsGrossWpm.textContent = `Gross WPM: ${scores.grossWpm.toFixed(1)}`;
         this.resultsAccuracy.textContent = `Accuracy: ${scores.accuracy.toFixed(1)}%`;
 
-        this.updateStarRating(scores.accuracy);
+        this.updateStarRating(scores.accuracy); // Update star display
 
+        // Show level unlock message if applicable (Game Mode only)
         if (mode === AppMode.GAME) {
             this.levelUnlockMessage.textContent = unlockedLevelId ? `Congratulations! Level ${unlockedLevelId} unlocked!` : '';
-            this.levelUnlockMessage.style.display = unlockedLevelId ? 'block' : 'block';
-        } else { // Sandbox
+            this.levelUnlockMessage.style.display = unlockedLevelId ? 'block' : 'block'; // Always block to maintain layout?
+        } else { // Sandbox mode
             this.levelUnlockMessage.textContent = '';
             this.levelUnlockMessage.style.display = 'none';
         }
 
-        const keyDisplayDit = MorseConfig.getKeyDisplay(this.currentDitKey);
-        const keyDisplayDah = MorseConfig.getKeyDisplay(this.currentDahKey);
-        const instructionEl = this.resultsScreen.querySelector('.results-instructions');
-        if (instructionEl) {
-            instructionEl.innerHTML = `Press <span class="key-hint">${keyDisplayDit}</span> (Retry) or <span class="key-hint">${keyDisplayDah}</span> (Next)`;
-        }
+        // Update instructions with current key bindings
+        this.updateResultsInstructionsKeyHints(this.currentDitKey, this.currentDahKey);
 
+        // Update paddle labels for Retry/Next
         this.updatePaddleLabels('results', hasNextLevelOption, mode);
         console.log(`UI: Showing Results (Mode: ${mode})`);
-        this._updateDisplayAreaSizing();
+        this._updateDisplayAreaSizing(); // Adjust layout if needed
     }
+
+     /** Updates the key hint text in the results screen instructions. */
+     updateResultsInstructionsKeyHints(ditKey, dahKey) {
+         const instructionEl = this.resultsScreen?.querySelector('.results-instructions');
+         if (instructionEl) {
+             const keyDisplayDit = MorseConfig.getKeyDisplay(ditKey);
+             const keyDisplayDah = MorseConfig.getKeyDisplay(dahKey);
+             instructionEl.innerHTML = `Press <span class="key-hint">${keyDisplayDit}</span> (Retry) or <span class="key-hint">${keyDisplayDah}</span> (Next)`;
+         }
+     }
+
 
     /** Updates the star display based on score/accuracy. */
     updateStarRating(accuracy) {
@@ -306,12 +320,13 @@ class UIManager {
     updateTargetPatternDisplay(morseSequence) {
         if (!this.targetPatternContainer) return;
         this._stopHintPulse("Target Pattern Update");
-        this.targetPatternContainer.innerHTML = '';
+        this.targetPatternContainer.innerHTML = ''; // Clear previous
         if (morseSequence) {
              morseSequence.split('').forEach(el => {
                  if (el === '.' || el === '-') this.targetPatternContainer.innerHTML += this._createPatternSvg(el);
              });
         }
+        // Re-apply visibility state after updating content
         this._applyHintVisibility(this.isHintVisible);
     }
 
@@ -319,9 +334,9 @@ class UIManager {
     updateUserPatternDisplay(morseSequence) {
         if (!this.userPatternContainer) return;
         if (morseSequence) {
-            this._stopHintPulse("User Input Started");
+            this._stopHintPulse("User Input Started"); // Stop pulse if user types
         }
-        this.userPatternContainer.innerHTML = '';
+        this.userPatternContainer.innerHTML = ''; // Clear previous
         if (morseSequence) {
              morseSequence.split('').forEach(el => {
                  if (el === '.' || el === '-') this.userPatternContainer.innerHTML += this._createPatternSvg(el);
@@ -332,61 +347,65 @@ class UIManager {
     updatePlaybackMorseDisplay(formattedMorse) { if (this.playbackMorseDisplay) this.playbackMorseDisplay.textContent = formattedMorse || '\u00A0'; }
     updateSandboxMorsePreview(formattedMorse) { if (this.sandboxMorsePreview) this.sandboxMorsePreview.textContent = formattedMorse || '\u00A0'; }
 
-    /** Sets the visual state (default, correct-flash, incorrect-pattern) for the pattern containers. */
+    /**
+     * Sets the visual state (default, correct, incorrect) for the pattern containers.
+     * Applies 'correct-pattern' or 'incorrect-pattern' classes.
+     * @param {'default' | 'correct' | 'incorrect'} state The feedback state.
+     */
     setPatternDisplayState(state) {
         const userContainer = this.userPatternContainer;
         const targetContainer = this.targetPatternContainer; // Hint container
 
-        if (!userContainer) return; // Need at least user container
+        if (!userContainer || !targetContainer) { // Ensure both exist for consistent feedback
+            console.warn("Pattern display state requires both user and target containers.");
+            return;
+        }
 
         console.log(`[Feedback DBG] setPatternDisplayState called with: ${state}`);
 
         // --- Clear conflicting timeouts ---
-        if (state !== 'correct' && this._correctFlashTimeout) {
+        if (this._correctFlashTimeout) {
             console.log("[Feedback DBG] Clearing existing CORRECT timeout.");
-            clearTimeout(this._correctFlashTimeout);
-            this._correctFlashTimeout = null;
+            clearTimeout(this._correctFlashTimeout); this._correctFlashTimeout = null;
         }
-        if (state !== 'incorrect' && this._incorrectPatternTimeout) {
+        if (this._incorrectPatternTimeout) {
             console.log("[Feedback DBG] Clearing existing INCORRECT timeout.");
-            clearTimeout(this._incorrectPatternTimeout);
-            this._incorrectPatternTimeout = null;
+            clearTimeout(this._incorrectPatternTimeout); this._incorrectPatternTimeout = null;
         }
 
-        // --- Remove current states ---
-        userContainer.classList.remove('correct-flash', 'incorrect-pattern');
-        targetContainer?.classList.remove('correct-flash', 'incorrect-pattern'); // Only if target exists
+        // --- Remove previous state classes ---
+        userContainer.classList.remove('correct-pattern', 'incorrect-pattern');
+        targetContainer.classList.remove('correct-pattern', 'incorrect-pattern');
 
-        // --- Stop Hint Pulse ---
+        // --- Stop Hint Pulse if giving feedback ---
         if (state === 'correct' || state === 'incorrect') {
             this._stopHintPulse(`Feedback: ${state}`);
         }
 
         // --- Apply new state and set removal timer ---
         if (state === 'correct') {
-            console.log("[Feedback DBG] Applying 'correct-flash' class.");
-            userContainer.classList.add('correct-flash');
-            if (targetContainer) targetContainer.classList.add('correct-flash');
+            console.log("[Feedback DBG] Applying 'correct-pattern' class.");
+            userContainer.classList.add('correct-pattern');
+            targetContainer.classList.add('correct-pattern'); // Apply to hint as well
 
-            // Use a slightly shorter duration maybe than incorrect?
-            const correctFlashDuration = MorseConfig.INCORRECT_FLASH_DURATION * 0.8;
+            const correctFlashDuration = MorseConfig.INCORRECT_FLASH_DURATION * 0.8; // Slightly shorter?
 
             this._correctFlashTimeout = setTimeout(() => {
-                 console.log("[Feedback DBG] CORRECT timeout fired. Removing 'correct-flash'.");
-                 userContainer.classList.remove('correct-flash');
-                 if (targetContainer) targetContainer.classList.remove('correct-flash');
+                 console.log("[Feedback DBG] CORRECT timeout fired. Removing 'correct-pattern'.");
+                 userContainer.classList.remove('correct-pattern');
+                 targetContainer.classList.remove('correct-pattern');
                  this._correctFlashTimeout = null;
             }, correctFlashDuration);
 
         } else if (state === 'incorrect') {
             console.log("[Feedback DBG] Applying 'incorrect-pattern' class.");
             userContainer.classList.add('incorrect-pattern');
-            if (targetContainer) targetContainer.classList.add('incorrect-pattern');
+            targetContainer.classList.add('incorrect-pattern'); // Apply to hint as well
 
             this._incorrectPatternTimeout = setTimeout(() => {
                 console.log("[Feedback DBG] INCORRECT timeout fired. Removing 'incorrect-pattern'.");
                 userContainer.classList.remove('incorrect-pattern');
-                if (targetContainer) targetContainer.classList.remove('incorrect-pattern');
+                targetContainer.classList.remove('incorrect-pattern');
                 this._incorrectPatternTimeout = null;
             }, MorseConfig.INCORRECT_FLASH_DURATION);
         } else {
@@ -398,7 +417,8 @@ class UIManager {
     /** Renders the sentence text into the display area. */
     renderSentence(sentence) {
         if (!this.textDisplay || !this.textDisplayWrapper) return;
-        this.textDisplay.innerHTML = '';
+        this.textDisplay.innerHTML = ''; // Clear previous content
+        // Reset styles potentially changed by _adjustTextDisplayFontSize
         this.textDisplay.style.fontSize = '';
         this.textDisplay.style.transform = 'translateX(0px)';
         this.textDisplayWrapper.scrollLeft = 0;
@@ -413,11 +433,11 @@ class UIManager {
                 this.textDisplay.appendChild(span);
             });
         }
-        this.resetCharacterStyles();
-        this.updateUserPatternDisplay("");
-        this.setPatternDisplayState('default');
-        this._adjustTextDisplayFontSize();
-        this._stopHintPulse("New Sentence Rendered");
+        this.resetCharacterStyles(); // Ensure all start as pending
+        this.updateUserPatternDisplay(""); // Clear user pattern
+        this.setPatternDisplayState('default'); // Reset pattern feedback state
+        this._adjustTextDisplayFontSize(); // Fit text vertically
+        this._stopHintPulse("New Sentence Rendered"); // Stop any previous pulse
     }
 
     /** Adjusts the font size of the text display to fit vertically. */
@@ -425,18 +445,19 @@ class UIManager {
         const element = this.textDisplay;
         const container = this.textDisplayWrapper;
         if (!element || !container || !element.textContent) {
-            if(element) element.style.fontSize = '';
+            if(element) element.style.fontSize = ''; // Reset if no content
             return;
         }
 
-        element.style.fontSize = '';
+        element.style.fontSize = ''; // Reset before measurement
         let currentFontSize = parseFloat(window.getComputedStyle(element).fontSize);
-        const minFontSize = 10;
+        const minFontSize = 10; // Minimum allowed font size
         let iterations = 0;
-        const maxIterations = 100;
+        const maxIterations = 100; // Prevent infinite loops
 
+        // Reduce font size until text fits vertically
         while (element.scrollHeight > container.clientHeight && currentFontSize > minFontSize && iterations < maxIterations) {
-            currentFontSize *= 0.95;
+            currentFontSize *= 0.95; // Decrease font size by 5%
             element.style.fontSize = `${currentFontSize}px`;
             iterations++;
         }
@@ -456,33 +477,38 @@ class UIManager {
         const charSpan = this.textDisplay?.querySelector(`.char[data-index="${charIndex}"]`);
         if (charSpan) {
             charSpan.classList.remove('pending', 'current', 'completed', 'incorrect');
-            charSpan.classList.add(state);
+            charSpan.classList.add(state); // Add the new state class
 
+            // Special handling for 'incorrect' state (temporary flash)
             if (state === 'incorrect') {
-                this._stopHintPulse("Character Incorrect");
+                this._stopHintPulse("Character Incorrect"); // Stop hint pulse on error
+                // Clear any previous incorrect flash timeout for this character
                 if (this._incorrectFlashTimeout) clearTimeout(this._incorrectFlashTimeout);
+                // Set a timer to remove the 'incorrect' class
                 this._incorrectFlashTimeout = setTimeout(() => {
                     if (charSpan.classList.contains('incorrect')) {
                         charSpan.classList.remove('incorrect');
-                        const currentGameState = window.morseGameState;
-                        if (currentGameState && currentGameState.currentCharIndex === charIndex &&
-                            (currentGameState.isPlaying() || currentGameState.status === GameStatus.READY || currentGameState.status === GameStatus.LISTENING)) {
+                        // Restore to 'current' if it's still the active character, otherwise 'pending'
+                        const currentGameState = window.morseGameState; // Access global state (consider dependency injection later)
+                        if (currentGameState && currentGameState.currentCharIndex === charIndex && currentGameState.isPlaying()) {
                             charSpan.classList.add('current');
                         } else {
-                            charSpan.classList.add('pending');
+                             charSpan.classList.add('pending');
                         }
                     }
-                    this._incorrectFlashTimeout = null;
+                    this._incorrectFlashTimeout = null; // Clear timeout ID
                 }, MorseConfig.INCORRECT_FLASH_DURATION);
             } else if (this._incorrectFlashTimeout && charSpan.classList.contains('incorrect')) {
+                // If state changes away from incorrect before timeout, clear the timeout
                 clearTimeout(this._incorrectFlashTimeout);
                 this._incorrectFlashTimeout = null;
             }
 
+            // If setting to 'current', center it horizontally
             if (state === 'current') {
                 this._centerCurrentCharacterHorizontally(charSpan);
             } else if (state === 'completed') {
-                this._stopHintPulse("Character Completed");
+                this._stopHintPulse("Character Completed"); // Stop hint pulse on correct char
             }
         }
     }
@@ -490,28 +516,32 @@ class UIManager {
 
     /** Highlights the next character, updates the target pattern, clears user input, and handles hint pulse. */
     highlightCharacter(currentIdx, targetChar) {
-        const prevSpan = this.textDisplay?.querySelector('.char.current');
-        if (prevSpan && prevSpan.dataset.index != currentIdx) {
-            if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) {
-                prevSpan.classList.remove('current');
-                prevSpan.classList.add('pending');
-            } else {
-                prevSpan.classList.remove('current');
+        // Remove 'current' from previous character(s)
+        this.textDisplay?.querySelectorAll('.char.current').forEach(prevSpan => {
+            if (prevSpan.dataset.index != currentIdx) { // Avoid removing from the one we're about to set
+                if (!prevSpan.classList.contains('incorrect') && !prevSpan.classList.contains('completed')) {
+                    prevSpan.classList.remove('current');
+                    prevSpan.classList.add('pending'); // Revert to pending if not incorrect/completed
+                } else {
+                    prevSpan.classList.remove('current'); // Just remove current if it was incorrect/completed
+                }
             }
-        }
+        });
 
+        // Set the new character to 'current'
         this.updateCharacterState(currentIdx, 'current');
 
+        // Update the target pattern display (hint)
         let morseSequence = null;
-        if (window.morseDecoder) {
+        if (window.morseDecoder) { // Access global decoder (consider DI)
             morseSequence = window.morseDecoder.encodeCharacter(targetChar);
         }
-        this.updateTargetPatternDisplay(morseSequence ?? "");
+        this.updateTargetPatternDisplay(morseSequence ?? ""); // Show hint
 
-        this.updateUserPatternDisplay("");
-        this.setPatternDisplayState('default'); // Reset pattern feedback
+        this.updateUserPatternDisplay(""); // Clear user input display
+        this.setPatternDisplayState('default'); // Reset pattern feedback visuals
 
-        // Start hint pulse timer if hint is visible and sequence exists
+        // Start hint pulse timer if hint is visible and there's a sequence to show
         if (this.isHintVisible && morseSequence) {
             this._startHintPulseTimer();
         } else {
@@ -526,18 +556,28 @@ class UIManager {
         if (!container || !element || !textDisplay) return;
 
         requestAnimationFrame(() => {
+            // Re-query element in case DOM updated
             const currentElement = textDisplay.querySelector(`.char[data-index="${element.dataset.index}"]`);
             if (!currentElement) return;
 
             const containerRect = container.getBoundingClientRect();
             const elementRect = currentElement.getBoundingClientRect();
+
+            // Calculate center points relative to viewport
             const containerCenter = containerRect.left + containerRect.width / 2;
             const elementCenter = elementRect.left + elementRect.width / 2;
+
+            // Calculate desired scroll adjustment
             const scrollAdjustment = elementCenter - containerCenter;
+
+            // Calculate target scroll position
             let targetScrollLeft = container.scrollLeft + scrollAdjustment;
+
+            // Clamp scroll position within bounds
             const maxScrollLeft = container.scrollWidth - containerRect.width;
             targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScrollLeft));
 
+            // Apply smooth scroll if adjustment is significant
             if (Math.abs(container.scrollLeft - targetScrollLeft) > 1) {
                 container.scrollTo({
                     left: targetScrollLeft,
@@ -554,37 +594,45 @@ class UIManager {
     updateGrossWpmDisplay(grossWpm) { if(this.grossWpmDisplay) this.grossWpmDisplay.textContent = `Gross WPM: ${grossWpm.toFixed(0)}`; }
     resetStatsDisplay() { this.updateTimer(0); this.updateWpmDisplay(0); this.updateAccuracyDisplay(100); this.updateGrossWpmDisplay(0); this.updateTargetPatternDisplay(""); this.updateUserPatternDisplay(""); this.setPatternDisplayState('default'); this._applyHintVisibility(this.isHintVisible, false); }
 
-    // --- Settings ---
+    // --- Settings UI Updates ---
     _updateWpmDisplay(wpm) { if(this.wpmValueDisplay) this.wpmValueDisplay.textContent = wpm; }
     _updateFrequencyDisplay(freq) { if(this.frequencyValueDisplay) this.frequencyValueDisplay.textContent = freq; }
-
-    // --- Volume UI Updates ---
     _updateVolumeSliderUI(volume) { if (this.volumeSlider) this.volumeSlider.value = volume; }
-    _updateSpeakerIcon(volume) {
-        const waves = [this.speakerWave1, this.speakerWave2, this.speakerWave3];
-        waves.forEach(wave => { if (wave) wave.style.display = 'none'; });
-        if (volume > 0.7 && this.speakerWave3) this.speakerWave3.style.display = 'inline';
-        if (volume > 0.3 && this.speakerWave2) this.speakerWave2.style.display = 'inline';
-        if (volume > 0 && this.speakerWave1) this.speakerWave1.style.display = 'inline';
-    }
-    // --- End Volume UI Updates ---
-
-    // --- Key Mapping UI Updates ---
+    _updateSpeakerIcon(volume) { const waves = [this.speakerWave1, this.speakerWave2, this.speakerWave3]; waves.forEach(wave => { if (wave) wave.style.display = 'none'; }); if (volume > 0.7 && this.speakerWave3) this.speakerWave3.style.display = 'inline'; if (volume > 0.3 && this.speakerWave2) this.speakerWave2.style.display = 'inline'; if (volume > 0 && this.speakerWave1) this.speakerWave1.style.display = 'inline'; }
     _updateKeyMappingDisplay() {
-        if (this.ditKeyInput) {
-            this.ditKeyInput.value = MorseConfig.getKeyDisplay(this.currentDitKey);
-            this.ditKeyInput.classList.remove('listening');
-            this.ditKeyInput.placeholder = "Click to set";
-        }
-        if (this.dahKeyInput) {
-            this.dahKeyInput.value = MorseConfig.getKeyDisplay(this.currentDahKey);
-            this.dahKeyInput.classList.remove('listening');
-            this.dahKeyInput.placeholder = "Click to set";
-        }
-        this.keyInputCurrentlyListening = null; // Ensure listening state is reset
+        if (this.ditKeyInput) { this.ditKeyInput.value = MorseConfig.getKeyDisplay(this.currentDitKey); this.ditKeyInput.classList.remove('listening'); this.ditKeyInput.placeholder = "Click to set"; }
+        if (this.dahKeyInput) { this.dahKeyInput.value = MorseConfig.getKeyDisplay(this.currentDahKey); this.dahKeyInput.classList.remove('listening'); this.dahKeyInput.placeholder = "Click to set"; }
+        this.keyInputCurrentlyListening = null; // Reset listening state
     }
-    // --- End Key Mapping UI Updates ---
+     _updateManualModeToggles() {
+         if (this.ditManualModeToggle) this.ditManualModeToggle.checked = this.isDitManualMode;
+         if (this.dahManualModeToggle) this.dahManualModeToggle.checked = this.isDahManualMode;
+     }
 
+     /** Updates all settings-related UI elements based on current internal state. */
+     _updateAllSettingsDisplays() {
+        // WPM
+        this._updateWpmDisplay(this.currentWpm);
+        if (this.wpmSlider) this.wpmSlider.value = this.currentWpm;
+        // Frequency
+        this._updateFrequencyDisplay(this.currentFrequency);
+        if (this.frequencySlider) this.frequencySlider.value = this.currentFrequency;
+        // Volume
+        this._updateVolumeSliderUI(this.currentVolume);
+        this._updateSpeakerIcon(this.currentVolume);
+        if (this.volumeSlider) this.volumeSlider.value = this.currentVolume;
+        // Sound Toggle
+        if (this.soundToggle) this.soundToggle.checked = this.isSoundEnabled;
+        // Dark Mode Toggle
+        if (this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled;
+        // Key Mapping Inputs
+        this._updateKeyMappingDisplay();
+        // Manual Mode Toggles
+        this._updateManualModeToggles();
+     }
+
+
+    // --- Settings Loading/Saving ---
     _saveSettings() {
          try {
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM, this.currentWpm);
@@ -593,9 +641,11 @@ class UIManager {
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY, this.currentFrequency);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE, this.isHintVisible);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME, this.currentVolume);
-             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY, this.currentDitKey); // Save Dit key
-             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY, this.currentDahKey); // Save Dah key
-             console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey });
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY, this.currentDitKey);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY, this.currentDahKey);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL, this.isDitManualMode);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL, this.isDahManualMode);
+             console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
          } catch (e) {
              console.error("Error saving settings:", e);
          }
@@ -603,68 +653,111 @@ class UIManager {
 
     _loadSettings() {
         try {
+            // Load values or use defaults from MorseConfig
             const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM);
             const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND);
             const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE);
             const savedFrequency = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FREQUENCY);
             const savedHintVisible = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_HINT_VISIBLE);
             const savedVolume = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME);
-            const savedDitKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY); // Load Dit key
-            const savedDahKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY); // Load Dah key
+            const savedDitKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
+            const savedDahKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
+            const savedDitManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
+            const savedDahManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
 
             this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM;
-            this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true;
+            this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true; // Default sound on
             this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false;
             this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
             this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE;
             this.currentVolume = savedVolume !== null ? parseFloat(savedVolume) : MorseConfig.AUDIO_DEFAULT_VOLUME;
+            this.isDitManualMode = savedDitManual !== null ? JSON.parse(savedDitManual) : MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
+            this.isDahManualMode = savedDahManual !== null ? JSON.parse(savedDahManual) : MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+
             // Load keys, using defaults if not found or invalid
             this.currentDitKey = (savedDitKey && savedDitKey.trim() !== '') ? savedDitKey : MorseConfig.KEYBINDING_DEFAULTS.dit;
             this.currentDahKey = (savedDahKey && savedDahKey.trim() !== '') ? savedDahKey : MorseConfig.KEYBINDING_DEFAULTS.dah;
 
-            // Basic validation to prevent assigning same key to both
+            // Basic validation to prevent assigning same key to both paddles
             if (this.currentDitKey === this.currentDahKey) {
                 console.warn(`Loaded keys are identical ('${this.currentDitKey}'). Resetting Dah key to default.`);
                 this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
-                // If default Dah is ALSO the same as Dit, reset Dit too (edge case)
+                // If default Dah is ALSO the same as Dit (unlikely but possible), reset Dit too
                 if (this.currentDitKey === this.currentDahKey) {
                     this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
                 }
-                this._saveSettings(); // Re-save corrected settings
+                // No need to save here, let the natural flow handle it or reset explicitly
             }
 
-
-            // Clamp frequency and volume
+            // Clamp frequency and volume to valid ranges
             this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency));
             this.currentVolume = Math.max(0.0, Math.min(1.0, this.currentVolume));
 
-            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey });
+            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
         } catch (e) {
             console.error("Error loading settings:", e);
+            // Fallback to defaults on error
             this.currentWpm = MorseConfig.DEFAULT_WPM;
             this.isSoundEnabled = true;
             this.isDarkModeEnabled = false;
             this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
             this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
             this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
-            this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit; // Default key on error
-            this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah; // Default key on error
+            this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
+            this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
+            this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
+            this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
         }
-        // Update UI elements to reflect loaded state (done in constructor)
+        // UI elements updated in constructor via _updateAllSettingsDisplays()
     }
 
-    /** Visually resets the key mapping inputs to defaults (called by main.js on progress reset) */
+    /** Visually resets the key mapping input fields based on current internal state. */
     resetKeyMappingInputs() {
-         this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
-         this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
-         this._saveSettings(); // Save the defaults
-         this._updateKeyMappingDisplay();
-         // Notify main.js to update InputHandler
-         if (this.callbacks && this.callbacks.onKeyMappingChange) {
-            this.callbacks.onKeyMappingChange({ dit: this.currentDitKey, dah: this.currentDahKey });
-         }
-     }
+        // Assumes this.currentDitKey and this.currentDahKey are already correctly set (e.g., by resetToDefaults)
+        this._updateKeyMappingDisplay();
+    }
 
+
+    /** Resets all UI settings elements and internal state to their default values defined in MorseConfig. */
+    resetToDefaults() {
+        console.log("UIManager: Resetting settings to defaults...");
+        // Reset internal state variables to defaults
+        this.currentWpm = MorseConfig.DEFAULT_WPM;
+        this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
+        this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
+        this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
+        this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
+        this.isSoundEnabled = true; // Assuming true is default
+        this.isDarkModeEnabled = false; // Assuming false is default
+        this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
+        this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
+        this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+
+        // Update all associated UI Elements
+        this._updateAllSettingsDisplays();
+
+        // Apply visual changes for theme/hint
+        this._applyDarkMode(this.isDarkModeEnabled);
+        this._applyHintVisibility(this.isHintVisible, false); // Apply hint visibility without pulse
+
+        // Save the reset defaults back to storage
+        this._saveSettings();
+
+        // Explicitly notify main.js about potential changes from reset
+        if (this.callbacks) {
+            if (this.callbacks.onWpmChange) this.callbacks.onWpmChange(this.currentWpm);
+            if (this.callbacks.onFrequencyChange) this.callbacks.onFrequencyChange(this.currentFrequency);
+            if (this.callbacks.onVolumeChange) this.callbacks.onVolumeChange(this.currentVolume);
+            if (this.callbacks.onSoundToggle) this.callbacks.onSoundToggle(this.isSoundEnabled);
+            if (this.callbacks.onKeyMappingChange) this.callbacks.onKeyMappingChange({ dit: this.currentDitKey, dah: this.currentDahKey });
+            if (this.callbacks.onManualModeChange) this.callbacks.onManualModeChange(this.getCurrentManualModeState());
+            if (this.callbacks.onHintToggle) this.callbacks.onHintToggle(this.isHintVisible);
+            if (this.callbacks.onDarkModeToggle) this.callbacks.onDarkModeToggle(this.isDarkModeEnabled);
+        }
+    }
+
+
+    // --- Paddle UI ---
     setButtonActive(buttonType, isActive) { const button = buttonType === 'dit' ? this.ditButton : this.dahButton; if (button) button.classList.toggle('active', isActive); }
 
     /** Updates paddle content for game vs results mode. */
@@ -679,10 +772,10 @@ class UIManager {
             labels[1].textContent = "Next";  // Dah = Next
             const isNextDisabled = (gameMode === AppMode.SANDBOX || !hasNextLevel);
             buttons[0].disabled = false; // Retry always enabled
-            buttons[1].disabled = isNextDisabled;
+            buttons[1].disabled = isNextDisabled; // Disable 'Next' if sandbox or no next level
             buttons.forEach(btn => btn.classList.add('results-label-active'));
         } else { // Game mode
-            labels[0].textContent = "";
+            labels[0].textContent = ""; // Clear labels for game/sandbox
             labels[1].textContent = "";
             buttons[0].disabled = false;
             buttons[1].disabled = false;
@@ -690,7 +783,11 @@ class UIManager {
         }
     }
 
+    // --- Playback/Sandbox UI ---
     setPlaybackButtonEnabled(enabled, text = 'Play Morse') { if (this.playSentenceButton) { this.playSentenceButton.disabled = !enabled; this.playSentenceButton.textContent = text; } }
+
+
+    // --- Theme & Hint Visibility ---
     _applyDarkMode(enable) { this.bodyElement.classList.toggle('dark-mode', enable); }
 
     /** Applies the visual hint visibility state, respecting the peek state. */
@@ -698,49 +795,54 @@ class UIManager {
         let effectiveVisibility = visible;
         const reasonPrefix = `applyHintVisibility(visible=${visible}, startPulse=${startPulse})`;
 
-        if (this.isControlHeld) {
+        if (this.isControlHeld) { // Peek override
             effectiveVisibility = true;
             this._stopHintPulse(`${reasonPrefix} -> Peek Active`);
         } else {
+            // Handle pulsing based on visibility state
             if (!visible) {
                 this._stopHintPulse(`${reasonPrefix} -> Hint Hidden`);
             } else if (startPulse) {
-                // Start timer only if the target container is actually visible (i.e., game UI is showing)
+                // Start timer only if the target container is actually visible (game UI active)
                 if(this.targetPatternContainer && this.targetPatternContainer.offsetParent !== null) {
-                    this._startHintPulseTimer();
+                    this._startHintPulseTimer(); // Schedule pulse
                 } else {
-                    this._stopHintPulse(`${reasonPrefix} -> Hint Visible (No Initial Pulse - Container Hidden)`);
+                    this._stopHintPulse(`${reasonPrefix} -> Hint Visible (No Pulse - Container Hidden)`);
                 }
             } else {
                 this._stopHintPulse(`${reasonPrefix} -> Hint Visible (No Initial Pulse)`);
             }
         }
 
+        // Apply the class to show/hide the hint container content
         this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !effectiveVisibility);
-        this.toggleHintButton?.setAttribute('aria-pressed', String(this.isHintVisible));
+        // Update ARIA attribute for accessibility
+        this.toggleHintButton?.setAttribute('aria-pressed', String(this.isHintVisible)); // Use actual setting state
     }
+
 
     /** Starts the timer to add the pulsing animation class to hint SVGs. */
     _startHintPulseTimer() {
-        this._stopHintPulse("Starting New Pulse Timer");
+        this._stopHintPulse("Starting New Pulse Timer"); // Clear any existing timer/pulse
         const svgs = this.targetPatternContainer?.querySelectorAll('svg');
+
+        // Conditions to pulse: SVGs exist, hint container is visually rendered, and hint is not hidden by toggle/peek
         if (!svgs || svgs.length === 0 || this.targetPatternOuterWrapper?.classList.contains('hint-hidden')) {
-            // console.log("[Hint Pulse DBG] Condition not met: No container/svgs or hint hidden.");
-            return;
+            return; // Don't schedule if no SVGs or hint is visually hidden
         }
 
-        const pulseDelayMs = 2000;
+        const pulseDelayMs = 2000; // Delay before starting pulse
         console.log(`[Hint Pulse DBG] Scheduling pulse for ${svgs.length} SVGs in ${pulseDelayMs}ms`);
         this._hintPulseTimer = setTimeout(() => {
-            // Check conditions *again* when timer fires
+            // Check conditions *again* when timer fires, in case state changed
             const currentSvgs = this.targetPatternContainer?.querySelectorAll('svg');
             if (currentSvgs && currentSvgs.length > 0 && !this.targetPatternOuterWrapper?.classList.contains('hint-hidden')) {
                 console.log("[Hint Pulse DBG] Timeout fired: Adding .hint-svg-pulse class.");
-                currentSvgs.forEach(svg => svg.classList.add('hint-svg-pulse'));
+                currentSvgs.forEach(svg => svg.classList.add('hint-svg-pulse')); // Apply pulse class
             } else {
                  console.log("[Hint Pulse DBG] Timeout fired, but SVGs gone or hint now hidden. Pulse cancelled.");
             }
-            this._hintPulseTimer = null;
+            this._hintPulseTimer = null; // Clear timer ID
         }, pulseDelayMs);
     }
 
@@ -748,11 +850,14 @@ class UIManager {
     _stopHintPulse(reason = "Unknown") {
         let stoppedTimer = false;
         let removedClassCount = 0;
+
+        // Clear the scheduling timeout if it exists
         if (this._hintPulseTimer) {
             clearTimeout(this._hintPulseTimer);
             this._hintPulseTimer = null;
             stoppedTimer = true;
         }
+        // Remove the pulse class from any currently pulsing SVGs
         const svgs = this.targetPatternContainer?.querySelectorAll('svg.hint-svg-pulse');
         if (svgs && svgs.length > 0) {
             svgs.forEach(svg => svg.classList.remove('hint-svg-pulse'));
@@ -763,6 +868,9 @@ class UIManager {
         }
     }
 
+
+    // --- Global Event Handling (Hint Peek, Volume Blur) ---
+
     /** Handles the global keydown event, primarily for hint peeking. */
      _handleGlobalKeyDown(event) {
         const targetElement = event.target;
@@ -771,189 +879,92 @@ class UIManager {
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
         const isGameVisible = this.gameUiWrapper && !this.gameUiWrapper.classList.contains('hidden');
 
-        // Don't peek if an input/textarea has focus OR if a key mapping input has focus
-        // Also don't peek if settings modal is open (unless key map input has focus, handled below)
-        if (isInputFocused || isKeyMapInputFocused || !isGameVisible || (isSettingsOpen && !isKeyMapInputFocused) ) {
-            // Allow key mapping input handling even if settings open
-            if (isKeyMapInputFocused && event.key !== 'Control') {
-                // Let key mapping handler deal with non-Control keys
-            } else if (event.key === 'Control' && isKeyMapInputFocused) {
-                // Ignore Control press if key map input focused
-                return;
-            } else if (!isGameVisible) {
-                 return; // Ignore if game not visible
-            } else if (isInputFocused || isSettingsOpen) {
-                return; // Ignore if other input has focus or settings open
-            }
+        // --- Conditions to IGNORE Ctrl key for peeking ---
+        // 1. If focus is on any input/textarea (unless it's the key map input, handled below)
+        // 2. If settings modal is open (unless focus is on key map input)
+        // 3. If the game UI itself isn't visible
+        if ( (isInputFocused && !isKeyMapInputFocused) || (isSettingsOpen && !isKeyMapInputFocused) || !isGameVisible) {
+            return; // Ignore event if any of these conditions are true
         }
+        // 4. Specifically ignore Ctrl key if focus is on a key mapping input
+        if (event.key === 'Control' && isKeyMapInputFocused) {
+             return;
+        }
+        // --- End Ignore Conditions ---
 
 
-        if (event.key === 'Control' && !this.isControlHeld) {
+        // Handle hint peek (Ctrl press)
+        if (event.key === 'Control' && !this.isControlHeld && isGameVisible) {
             console.log("[Peek DBG] Ctrl Down Detected. Starting peek.");
             this.isControlHeld = true;
-            this.hintWasVisibleBeforePeek = this.isHintVisible;
+            this.hintWasVisibleBeforePeek = this.isHintVisible; // Store original state
             console.log(`[Peek DBG] Stored hintWasVisibleBeforePeek: ${this.hintWasVisibleBeforePeek}`);
             console.log("[Peek DBG] Calling _applyHintVisibility(true, false) for peek start.");
-            this._applyHintVisibility(true, false);
+            this._applyHintVisibility(true, false); // Force hint visible, no pulse
         }
     }
 
     /** Handles the global keyup event, primarily for hint peeking. */
     _handleGlobalKeyUp(event) {
+         // Only handle Ctrl keyup for peeking
          if (event.key === 'Control') {
             console.log("[Peek DBG] Ctrl Up Detected.");
-            if (this.isControlHeld) {
+            if (this.isControlHeld) { // Only act if we were tracking the hold
                  console.log("[Peek DBG] Was holding Ctrl. Ending peek.");
-                 this.isControlHeld = false;
-                 if (this.hintWasVisibleBeforePeek) {
-                     console.log("[Peek DBG] Hint was visible. Toggling OFF after peek.");
-                     this.isHintVisible = false;
-                     this._saveSettings();
-                     this._applyHintVisibility(false);
-                     if (this.callbacks && this.callbacks.onHintToggle) {
-                        this.callbacks.onHintToggle(this.isHintVisible);
-                     }
-                 } else {
-                     console.log("[Peek DBG] Hint was hidden. Restoring hidden state after peek.");
-                     this._applyHintVisibility(false);
-                 }
+                 this.isControlHeld = false; // Reset hold flag
+                 // Restore the original hint visibility state
+                 console.log(`[Peek DBG] Restoring hint visibility to: ${this.hintWasVisibleBeforePeek}`);
+                 this._applyHintVisibility(this.hintWasVisibleBeforePeek); // Restore state, allow pulse if it was visible
             } else {
-                 console.log("[Peek DBG] Ctrl Up, but wasn't tracking hold.");
+                 console.log("[Peek DBG] Ctrl Up, but wasn't tracking hold (isControlHeld=false).");
             }
          }
     }
 
 
-    /** Adds global event listeners needed by the UI manager (e.g., hint peek). */
+    /** Adds global event listeners needed by the UI manager. */
     _addGlobalEventListeners() {
         document.addEventListener('keydown', this._handleGlobalKeyDown.bind(this));
         document.addEventListener('keyup', this._handleGlobalKeyUp.bind(this));
+        // Blur volume slider after interaction to prevent keyboard interference
         this.volumeSlider?.addEventListener('mouseup', () => this.volumeSlider.blur());
         this.volumeSlider?.addEventListener('touchend', () => this.volumeSlider.blur());
     }
 
     // --- Paddle Texture Drag and Drop ---
-    _loadPaddleTextures() {
-        try {
-            const savedTextures = localStorage.getItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES);
-            if (savedTextures) {
-                const parsedTextures = JSON.parse(savedTextures);
-                if (parsedTextures.dit) {
-                    this._applyTexture(this.ditButton, parsedTextures.dit);
-                    this.paddleTextures.dit = parsedTextures.dit;
-                }
-                if (parsedTextures.dah) {
-                    this._applyTexture(this.dahButton, parsedTextures.dah);
-                    this.paddleTextures.dah = parsedTextures.dah;
-                }
-                // console.log("Paddle textures loaded:", this.paddleTextures);
-            }
-        } catch (e) {
-            console.error("Error loading paddle textures:", e);
-            this.paddleTextures = { dit: null, dah: null };
-        }
-    }
-    _savePaddleTextures() {
-        try {
-            localStorage.setItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES, JSON.stringify(this.paddleTextures));
-            // console.log("Paddle textures saved:", this.paddleTextures);
-        } catch (e) {
-            console.error("Error saving paddle textures:", e);
-        }
-    }
-    _addDragDropListeners() {
-        [this.ditButton, this.dahButton].forEach(paddle => {
-            if (paddle) {
-                paddle.addEventListener('dragover', this._handleDragOver.bind(this));
-                paddle.addEventListener('dragleave', this._handleDragLeave.bind(this));
-                paddle.addEventListener('drop', this._handleDrop.bind(this));
-            }
-        });
-    }
-    _handleDragOver(event) {
-        event.preventDefault(); event.stopPropagation();
-        const paddle = event.currentTarget;
-        if (paddle) { paddle.classList.add('drag-over'); event.dataTransfer.dropEffect = 'copy'; }
-    }
-    _handleDragLeave(event) {
-        event.preventDefault(); event.stopPropagation();
-        const paddle = event.currentTarget;
-        if (paddle) paddle.classList.remove('drag-over');
-    }
+    _loadPaddleTextures() { try { const savedTextures = localStorage.getItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES); if (savedTextures) { const parsedTextures = JSON.parse(savedTextures); if (parsedTextures.dit) { this._applyTexture(this.ditButton, parsedTextures.dit); this.paddleTextures.dit = parsedTextures.dit; } if (parsedTextures.dah) { this._applyTexture(this.dahButton, parsedTextures.dah); this.paddleTextures.dah = parsedTextures.dah; } } } catch (e) { console.error("Error loading paddle textures:", e); this.paddleTextures = { dit: null, dah: null }; } }
+    _savePaddleTextures() { try { localStorage.setItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES, JSON.stringify(this.paddleTextures)); } catch (e) { console.error("Error saving paddle textures:", e); } }
+    _addDragDropListeners() { [this.ditButton, this.dahButton].forEach(paddle => { if (paddle) { paddle.addEventListener('dragover', this._handleDragOver.bind(this)); paddle.addEventListener('dragleave', this._handleDragLeave.bind(this)); paddle.addEventListener('drop', this._handleDrop.bind(this)); } }); }
+    _handleDragOver(event) { event.preventDefault(); event.stopPropagation(); const paddle = event.currentTarget; if (paddle) { paddle.classList.add('drag-over'); event.dataTransfer.dropEffect = 'copy'; } }
+    _handleDragLeave(event) { event.preventDefault(); event.stopPropagation(); const paddle = event.currentTarget; if (paddle) paddle.classList.remove('drag-over'); }
     _handleDrop(event) {
         event.preventDefault(); event.stopPropagation();
-        const paddle = event.currentTarget;
-        if (!paddle) return;
+        const paddle = event.currentTarget; if (!paddle) return;
         paddle.classList.remove('drag-over');
-        const paddleType = paddle.id === 'dit-button' ? 'dit' : 'dah'; // Use ID
-
-        const dt = event.dataTransfer;
-        const files = dt.files;
-
+        const paddleType = paddle.id === 'dit-button' ? 'dit' : 'dah';
+        const dt = event.dataTransfer; const files = dt.files;
         if (files && files.length > 0) {
             const file = files[0];
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const imageDataUrl = e.target.result;
-                    this._applyTexture(paddle, imageDataUrl);
-                    this.paddleTextures[paddleType] = imageDataUrl;
-                    this._savePaddleTextures();
-                };
-                reader.readAsDataURL(file);
-                // console.log(`Applying file texture to ${paddleType} paddle: ${file.name}`);
-            } else {
-                alert("Please drop an image file.");
-            }
+            if (file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { const imageDataUrl = e.target.result; this._applyTexture(paddle, imageDataUrl); this.paddleTextures[paddleType] = imageDataUrl; this._savePaddleTextures(); }; reader.readAsDataURL(file); } else { alert("Please drop an image file."); }
         } else {
             let imageUrl = dt.getData('text/uri-list') || dt.getData('URL');
-            if (!imageUrl) {
-                 const htmlData = dt.getData('text/html');
-                 if (htmlData) {
-                     const tempDiv = document.createElement('div');
-                     tempDiv.innerHTML = htmlData;
-                     const imgElement = tempDiv.querySelector('img');
-                     if (imgElement) imageUrl = imgElement.src;
-                 }
-            }
-            if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:image'))) {
-                this._applyTexture(paddle, imageUrl);
-                this.paddleTextures[paddleType] = imageUrl;
-                this._savePaddleTextures();
-                // console.log(`Applying URL texture to ${paddleType} paddle: ${imageUrl}`);
-            } else {
-                 alert("Could not get a valid image URL from the dropped item.");
-            }
+            if (!imageUrl) { const htmlData = dt.getData('text/html'); if (htmlData) { const tempDiv = document.createElement('div'); tempDiv.innerHTML = htmlData; const imgElement = tempDiv.querySelector('img'); if (imgElement) imageUrl = imgElement.src; } }
+            if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:image'))) { this._applyTexture(paddle, imageUrl); this.paddleTextures[paddleType] = imageUrl; this._savePaddleTextures(); } else { alert("Could not get a valid image URL."); }
         }
     }
-    _applyTexture(paddleElement, imageUrl) {
-        if (!paddleElement) return;
-        paddleElement.style.backgroundImage = `url('${imageUrl}')`;
-        paddleElement.classList.add('has-texture');
-        // console.log("Texture applied to:", paddleElement.id);
-    }
-    _removeTexture(paddleElement) {
-         if (!paddleElement) return;
-         paddleElement.style.backgroundImage = 'none';
-         paddleElement.classList.remove('has-texture');
-         const paddleType = paddleElement.id === 'dit-button' ? 'dit' : 'dah';
-         if (paddleType) {
-            this.paddleTextures[paddleType] = null;
-            this._savePaddleTextures();
-         }
-        // console.log("Texture removed from:", paddleElement.id);
-    }
+    _applyTexture(paddleElement, imageUrl) { if (!paddleElement) return; paddleElement.style.backgroundImage = `url('${imageUrl}')`; paddleElement.classList.add('has-texture'); }
+    _removeTexture(paddleElement) { if (!paddleElement) return; paddleElement.style.backgroundImage = 'none'; paddleElement.classList.remove('has-texture'); const paddleType = paddleElement.id === 'dit-button' ? 'dit' : 'dah'; if (paddleType) { this.paddleTextures[paddleType] = null; this._savePaddleTextures(); } }
     // --- End Paddle Texture Drag and Drop ---
 
     // --- Key Mapping Event Handlers ---
     _handleKeyMappingInputFocus(event) {
         const inputElement = event.target;
         const type = inputElement.id === 'dit-key-input' ? 'dit' : 'dah';
-
-        if (this.keyInputCurrentlyListening) {
-            this._updateKeyMappingDisplay();
+        // Cancel any other listening input
+        if (this.keyInputCurrentlyListening && this.keyInputCurrentlyListening !== type) {
+            this._updateKeyMappingDisplay(); // Reset other input visually
         }
-
+        // Set this one to listening state
         inputElement.value = "Listening...";
         inputElement.classList.add('listening');
         this.keyInputCurrentlyListening = type;
@@ -961,10 +972,9 @@ class UIManager {
     }
 
     _handleKeyMappingKeyDown(event) {
-        if (!this.keyInputCurrentlyListening) return;
+        if (!this.keyInputCurrentlyListening) return; // Only act if listening
 
-        event.preventDefault();
-        event.stopPropagation();
+        event.preventDefault(); event.stopPropagation(); // Stop default key actions
 
         const newKey = event.key;
         const type = this.keyInputCurrentlyListening;
@@ -974,16 +984,9 @@ class UIManager {
         console.log(`Key mapping: Detected key "${newKey}" for ${type}`);
 
         // --- Validation ---
-        if (newKey.trim() === '' || newKey === ' ') { // Disallow empty or space
-            isValid = false;
-            errorMessage = "Key cannot be empty or space.";
-        } else if (type === 'dit' && newKey === this.currentDahKey) {
-            isValid = false;
-            errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dah.`;
-        } else if (type === 'dah' && newKey === this.currentDitKey) {
-            isValid = false;
-            errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dit.`;
-        }
+        if (newKey.trim() === '' || newKey === ' ') { isValid = false; errorMessage = "Key cannot be empty or space."; }
+        else if (type === 'dit' && newKey === this.currentDahKey) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dah.`; }
+        else if (type === 'dah' && newKey === this.currentDitKey) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dit.`; }
 
         // --- Update or Reject ---
         if (isValid) {
@@ -991,23 +994,27 @@ class UIManager {
             if (type === 'dit') this.currentDitKey = newKey;
             else this.currentDahKey = newKey;
 
-            this._saveSettings();
-            this._updateKeyMappingDisplay(); // Resets listening state
+            this._saveSettings(); // Persist the new key
+            this._updateKeyMappingDisplay(); // Update UI, resets listening state
 
+            // Notify main.js about the change
              if (this.callbacks && this.callbacks.onKeyMappingChange) {
                 this.callbacks.onKeyMappingChange({ dit: this.currentDitKey, dah: this.currentDahKey });
              }
+             inputElement.blur(); // Remove focus after successful set
 
         } else {
             console.warn(`Key mapping: Invalid key "${newKey}" for ${type}. Reason: ${errorMessage}`);
             alert(`Invalid key: ${errorMessage}`);
+            // Keep the input in listening state visually
             const inputElement = (type === 'dit') ? this.ditKeyInput : this.dahKeyInput;
-            if (inputElement) inputElement.value = "Listening..."; // Keep listening prompt
+            if (inputElement) inputElement.value = "Listening...";
         }
     }
 
     _handleKeyMappingBlur(event) {
-        if (this.keyInputCurrentlyListening) {
+        // If user clicks away while listening, revert the display
+        if (this.keyInputCurrentlyListening && event.target === (this.keyInputCurrentlyListening === 'dit' ? this.ditKeyInput : this.dahKeyInput)) {
             console.log("Key mapping: Blurred while listening, cancelling.");
             this._updateKeyMappingDisplay(); // Reverts display and resets listening state
         }
@@ -1015,24 +1022,26 @@ class UIManager {
     // --- End Key Mapping Event Handlers ---
 
 
+    /** Binds all event listeners managed by the UIManager to their respective callbacks. */
     addEventListeners(callbacks) {
-        this.callbacks = callbacks;
+        this.callbacks = callbacks; // Store callbacks from main.js
 
-        // Main Menu
+        // Main Menu Buttons
         this.startGameButton?.addEventListener('click', callbacks.onShowLevelSelect);
         this.showSandboxButton?.addEventListener('click', callbacks.onShowSandbox);
         this.showPlaybackButton?.addEventListener('click', callbacks.onShowPlayback);
+        // showSettingsButton click handled by Modal instance
 
-        // Playback
+        // Playback Screen
         this.playSentenceButton?.addEventListener('click', callbacks.onPlaySentence);
         this.playbackMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Sandbox
+        // Sandbox Screen
         this.startSandboxButton?.addEventListener('click', callbacks.onStartSandbox);
         this.sandboxInput?.addEventListener('input', callbacks.onSandboxInputChange);
         this.sandboxMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Level Selection
+        // Level Selection Screen
         this.levelListContainer?.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON' && e.target.classList.contains('level-button') && !e.target.disabled) {
                 const levelId = parseInt(e.target.dataset.levelId, 10);
@@ -1044,57 +1053,60 @@ class UIManager {
         // Results Screen Navigation
         this.resultsMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Settings Modal Content
+        // --- Settings Modal Content Event Listeners ---
+        // WPM Slider
         this.wpmSlider?.addEventListener('input', (e) => this._updateWpmDisplay(parseInt(e.target.value, 10)));
         this.wpmSlider?.addEventListener('change', (e) => { this.currentWpm = parseInt(e.target.value, 10); this._saveSettings(); if (callbacks.onWpmChange) callbacks.onWpmChange(this.currentWpm); });
+        // Frequency Slider
         this.frequencySlider?.addEventListener('input', (e) => this._updateFrequencyDisplay(parseInt(e.target.value, 10)));
         this.frequencySlider?.addEventListener('change', (e) => { this.currentFrequency = parseInt(e.target.value, 10); this._saveSettings(); if (callbacks.onFrequencyChange) callbacks.onFrequencyChange(this.currentFrequency); });
+        // Sound Toggle
         this.soundToggle?.addEventListener('change', (e) => { this.isSoundEnabled = e.target.checked; this._saveSettings(); if (callbacks.onSoundToggle) callbacks.onSoundToggle(this.isSoundEnabled); });
+        // Dark Mode Toggle
         this.darkModeToggle?.addEventListener('change', (e) => { this.isDarkModeEnabled = e.target.checked; this._applyDarkMode(this.isDarkModeEnabled); this._saveSettings(); if (callbacks.onDarkModeToggle) callbacks.onDarkModeToggle(this.isDarkModeEnabled); });
+        // Reset Progress Button
         this.resetProgressButton?.addEventListener('click', () => { if (callbacks.onResetProgress) callbacks.onResetProgress(); });
-
-        // Key Mapping Inputs (in Modal)
+        // Key Mapping Inputs
         this.ditKeyInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
         this.dahKeyInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
         this.ditKeyInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
         this.dahKeyInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
-        this.ditKeyInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this));
+        this.ditKeyInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this)); // Handle blur to cancel listening
         this.dahKeyInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this));
+        // Manual Mode Toggles
+        this.ditManualModeToggle?.addEventListener('change', (e) => { this.isDitManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
+        this.dahManualModeToggle?.addEventListener('change', (e) => { this.isDahManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
+        // --- End Settings Modal Listeners ---
 
         // Volume Slider (Game UI)
-         this.volumeSlider?.addEventListener('input', (e) => {
-             const newVolume = parseFloat(e.target.value);
-             this._updateSpeakerIcon(newVolume);
-             if (callbacks.onVolumeChange) callbacks.onVolumeChange(newVolume);
-         });
-         this.volumeSlider?.addEventListener('change', (e) => {
-             const newVolume = parseFloat(e.target.value);
-             this.currentVolume = newVolume;
-             this._saveSettings();
-             if (callbacks.onVolumeChange) callbacks.onVolumeChange(this.currentVolume);
-         });
+         this.volumeSlider?.addEventListener('input', (e) => { const newVolume = parseFloat(e.target.value); this._updateSpeakerIcon(newVolume); if (callbacks.onVolumeChange) callbacks.onVolumeChange(newVolume, false); /* false = not final change */ });
+         this.volumeSlider?.addEventListener('change', (e) => { const newVolume = parseFloat(e.target.value); this.currentVolume = newVolume; this._saveSettings(); if (callbacks.onVolumeChange) callbacks.onVolumeChange(this.currentVolume, true); /* true = final change */ });
 
-        // Game UI
+        // Hint Toggle Button (Game UI)
         this.toggleHintButton?.addEventListener('click', () => {
-            this.isHintVisible = !this.isHintVisible;
-            this._saveSettings();
-            this._applyHintVisibility(this.isHintVisible);
-            if (callbacks.onHintToggle) callbacks.onHintToggle(this.isHintVisible);
+            this.isHintVisible = !this.isHintVisible; // Toggle internal state
+            this._saveSettings(); // Save the new state
+            this._applyHintVisibility(this.isHintVisible); // Update UI visuals
+            if (callbacks.onHintToggle) callbacks.onHintToggle(this.isHintVisible); // Notify main.js
         });
+        // Game Menu Button (Game UI)
         this.gameMenuButton?.addEventListener('click', callbacks.onShowMainMenu);
 
-        // Resize handler
+        // Window Resize Handler
         let resizeTimeout;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
-                const currentSpan = this.textDisplay?.querySelector('.char.current');
+                // Adjust text display font size on resize
                 this._adjustTextDisplayFontSize();
+                // Recenter current character if game is active
+                const currentSpan = this.textDisplay?.querySelector('.char.current');
                 if (currentSpan) {
                     this._centerCurrentCharacterHorizontally(currentSpan);
                 }
+                 // Update layout sizing based on input area visibility
                  this._updateDisplayAreaSizing();
-            }, 150);
+            }, 150); // Debounce resize events
         });
 
         console.log("UI Event Listeners Added.");
@@ -1109,9 +1121,19 @@ class UIManager {
     getInitialVolume() { return this.currentVolume; }
     getCurrentDitKey() { return this.currentDitKey; }
     getCurrentDahKey() { return this.currentDahKey; }
+    getCurrentDitManualState() { return this.isDitManualMode; }
+    getCurrentDahManualState() { return this.isDahManualMode; }
+    getCurrentManualModeState() { return { ditManual: this.isDitManualMode, dahManual: this.isDahManualMode }; }
     getPlaybackSentence() { return this.playbackInput ? this.playbackInput.value : ""; }
     getSandboxSentence() { return this.sandboxInput ? this.sandboxInput.value : ""; }
 }
 
 // Ensure this runs after config.js
-window.morseUIManager = new UIManager();
+// Create the single instance after the DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    if (!window.morseUIManager) {
+        window.morseUIManager = new UIManager();
+    } else {
+        console.warn("UIManager instance already exists.");
+    }
+});

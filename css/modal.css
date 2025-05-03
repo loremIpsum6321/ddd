@@ -4,6 +4,7 @@
  * -------------
  * Styling for the draggable modal window. Ensures theme variables are applied.
  * Fixes potential text selection during drag.
+ * Adds styling for manual mode toggles.
  */
 
  .modal {
@@ -111,11 +112,13 @@
      justify-content: space-between;
      align-items: center;
      margin-top: 5px;
+     padding-left: 10px; /* Indent toggle rows */
 }
 
 .modal-content .settings-toggle-row label {
     margin-bottom: 0;
-    width: auto;
+    width: auto; /* Let label take its content width */
+    justify-content: flex-start; /* Align label text left */
     color: inherit; /* Inherit from modal */
 }
 
@@ -123,7 +126,36 @@
     transform: scale(1.4);
     cursor: pointer;
     accent-color: var(--button-primary-bg); /* Use theme color */
+    margin-left: auto; /* Push checkbox to the right */
+    flex-shrink: 0;
 }
+
+/* Style for toggle groups like Paddle Mode */
+.settings-toggle-group {
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 8px 10px 10px 10px; /* Add some internal padding */
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Space between label and rows */
+}
+
+.settings-group-label {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: inherit;
+    margin-bottom: 5px; /* Space below group label */
+    display: block; /* Make it block level */
+    width: 100%;
+}
+
+/* Adjust spacing for toggle rows within a group */
+.settings-toggle-group .settings-toggle-row {
+    margin-top: 0;
+    padding-left: 0; /* Remove extra indent within group */
+}
+
 
 .modal-content button {
     width: 100%;
