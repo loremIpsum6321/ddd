@@ -7,6 +7,10 @@
  * view transitions, settings loading/saving/application, and event binding.
  * Handles feedback display, text rendering, hint visibility, paddle textures,
  * key mapping UI, and manual mode UI.
+ * UPDATE: Fixed hint peek logic.
+ * UPDATE: Updated resetToDefaults to use combined defaults and not touch progress keys.
+ * UPDATE: Updated paddle mode toggle logic to reflect Checked=Manual.
+ * UPDATE: Added Reset Settings button listener.
  */
 class UIManager {
     /**
@@ -79,6 +83,7 @@ class UIManager {
         this.frequencyValueDisplay = document.getElementById('frequency-value-display');
         this.soundToggle = document.getElementById('sound-toggle');
         this.darkModeToggle = document.getElementById('dark-mode-toggle');
+        this.resetSettingsButton = document.getElementById('reset-settings-button'); // NEW
         this.resetProgressButton = document.getElementById('reset-progress-button');
         // Key Mapping Inputs
         this.ditKeyInput = document.getElementById('dit-key-input');
@@ -112,16 +117,16 @@ class UIManager {
         this.levelSelectMenuButton = document.getElementById('level-select-menu-button');
 
         // Internal State & Constants
-        this.currentWpm = MorseConfig.DEFAULT_WPM;
-        this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
-        this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
-        this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
-        this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
-        this.isSoundEnabled = true;
-        this.isDarkModeEnabled = false;
-        this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
-        this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
-        this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+        this.currentWpm = MorseConfig.ALL_SETTINGS_DEFAULTS.wpm;
+        this.currentFrequency = MorseConfig.ALL_SETTINGS_DEFAULTS.frequency;
+        this.currentVolume = MorseConfig.ALL_SETTINGS_DEFAULTS.volume;
+        this.currentDitKey = MorseConfig.ALL_SETTINGS_DEFAULTS.ditKey;
+        this.currentDahKey = MorseConfig.ALL_SETTINGS_DEFAULTS.dahKey;
+        this.isSoundEnabled = MorseConfig.ALL_SETTINGS_DEFAULTS.soundEnabled;
+        this.isDarkModeEnabled = MorseConfig.ALL_SETTINGS_DEFAULTS.darkMode;
+        this.isHintVisible = MorseConfig.ALL_SETTINGS_DEFAULTS.hintVisible;
+        this.isDitManualMode = MorseConfig.ALL_SETTINGS_DEFAULTS.ditManual;
+        this.isDahManualMode = MorseConfig.ALL_SETTINGS_DEFAULTS.dahManual;
         this.isControlHeld = false; // For hint peek
         this.hintWasVisibleBeforePeek = false; // For hint peek restore
         this.keyInputCurrentlyListening = null; // 'dit', 'dah', or null
@@ -286,6 +291,7 @@ class UIManager {
          if (instructionEl) {
              const keyDisplayDit = MorseConfig.getKeyDisplay(ditKey);
              const keyDisplayDah = MorseConfig.getKeyDisplay(dahKey);
+             // Swapped labels: Dit=Retry, Dah=Next
              instructionEl.innerHTML = `Press <span class="key-hint">${keyDisplayDit}</span> (Retry) or <span class="key-hint">${keyDisplayDah}</span> (Next)`;
          }
      }
@@ -327,7 +333,7 @@ class UIManager {
              });
         }
         // Re-apply visibility state after updating content
-        this._applyHintVisibility(this.isHintVisible);
+        this._applyHintVisibility(this.isHintVisible, false); // Apply visibility without starting pulse immediately
     }
 
     /** Updates the user input pattern display. */
@@ -361,15 +367,15 @@ class UIManager {
             return;
         }
 
-        console.log(`[Feedback DBG] setPatternDisplayState called with: ${state}`);
+        // console.log(`[Feedback DBG] setPatternDisplayState called with: ${state}`);
 
         // --- Clear conflicting timeouts ---
         if (this._correctFlashTimeout) {
-            console.log("[Feedback DBG] Clearing existing CORRECT timeout.");
+            // console.log("[Feedback DBG] Clearing existing CORRECT timeout.");
             clearTimeout(this._correctFlashTimeout); this._correctFlashTimeout = null;
         }
         if (this._incorrectPatternTimeout) {
-            console.log("[Feedback DBG] Clearing existing INCORRECT timeout.");
+            // console.log("[Feedback DBG] Clearing existing INCORRECT timeout.");
             clearTimeout(this._incorrectPatternTimeout); this._incorrectPatternTimeout = null;
         }
 
@@ -384,32 +390,32 @@ class UIManager {
 
         // --- Apply new state and set removal timer ---
         if (state === 'correct') {
-            console.log("[Feedback DBG] Applying 'correct-pattern' class.");
+            // console.log("[Feedback DBG] Applying 'correct-pattern' class.");
             userContainer.classList.add('correct-pattern');
             targetContainer.classList.add('correct-pattern'); // Apply to hint as well
 
             const correctFlashDuration = MorseConfig.INCORRECT_FLASH_DURATION * 0.8; // Slightly shorter?
 
             this._correctFlashTimeout = setTimeout(() => {
-                 console.log("[Feedback DBG] CORRECT timeout fired. Removing 'correct-pattern'.");
+                 // console.log("[Feedback DBG] CORRECT timeout fired. Removing 'correct-pattern'.");
                  userContainer.classList.remove('correct-pattern');
                  targetContainer.classList.remove('correct-pattern');
                  this._correctFlashTimeout = null;
             }, correctFlashDuration);
 
         } else if (state === 'incorrect') {
-            console.log("[Feedback DBG] Applying 'incorrect-pattern' class.");
+            // console.log("[Feedback DBG] Applying 'incorrect-pattern' class.");
             userContainer.classList.add('incorrect-pattern');
             targetContainer.classList.add('incorrect-pattern'); // Apply to hint as well
 
             this._incorrectPatternTimeout = setTimeout(() => {
-                console.log("[Feedback DBG] INCORRECT timeout fired. Removing 'incorrect-pattern'.");
+                // console.log("[Feedback DBG] INCORRECT timeout fired. Removing 'incorrect-pattern'.");
                 userContainer.classList.remove('incorrect-pattern');
                 targetContainer.classList.remove('incorrect-pattern');
                 this._incorrectPatternTimeout = null;
             }, MorseConfig.INCORRECT_FLASH_DURATION);
         } else {
-             console.log("[Feedback DBG] State is 'default'. Classes removed.");
+             // console.log("[Feedback DBG] State is 'default'. Classes removed.");
         }
     }
 
@@ -605,6 +611,7 @@ class UIManager {
         this.keyInputCurrentlyListening = null; // Reset listening state
     }
      _updateManualModeToggles() {
+         // UPDATE: Reflects Checked = Manual = true
          if (this.ditManualModeToggle) this.ditManualModeToggle.checked = this.isDitManualMode;
          if (this.dahManualModeToggle) this.dahManualModeToggle.checked = this.isDahManualMode;
      }
@@ -653,7 +660,8 @@ class UIManager {
 
     _loadSettings() {
         try {
-            // Load values or use defaults from MorseConfig
+            // Load values or use defaults from MorseConfig.ALL_SETTINGS_DEFAULTS
+            const defaults = MorseConfig.ALL_SETTINGS_DEFAULTS;
             const savedWpm = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_WPM);
             const savedSound = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_SOUND);
             const savedDarkMode = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DARK_MODE);
@@ -665,28 +673,27 @@ class UIManager {
             const savedDitManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
             const savedDahManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
 
-            this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : MorseConfig.DEFAULT_WPM;
-            this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : true; // Default sound on
-            this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : false;
-            this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
-            this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : MorseConfig.HINT_DEFAULT_VISIBLE;
-            this.currentVolume = savedVolume !== null ? parseFloat(savedVolume) : MorseConfig.AUDIO_DEFAULT_VOLUME;
-            this.isDitManualMode = savedDitManual !== null ? JSON.parse(savedDitManual) : MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
-            this.isDahManualMode = savedDahManual !== null ? JSON.parse(savedDahManual) : MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+            this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : defaults.wpm;
+            this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : defaults.soundEnabled;
+            this.isDarkModeEnabled = savedDarkMode !== null ? JSON.parse(savedDarkMode) : defaults.darkMode;
+            this.currentFrequency = savedFrequency !== null ? parseInt(savedFrequency, 10) : defaults.frequency;
+            this.isHintVisible = savedHintVisible !== null ? JSON.parse(savedHintVisible) : defaults.hintVisible;
+            this.currentVolume = savedVolume !== null ? parseFloat(savedVolume) : defaults.volume;
+            this.isDitManualMode = savedDitManual !== null ? JSON.parse(savedDitManual) : defaults.ditManual;
+            this.isDahManualMode = savedDahManual !== null ? JSON.parse(savedDahManual) : defaults.dahManual;
 
             // Load keys, using defaults if not found or invalid
-            this.currentDitKey = (savedDitKey && savedDitKey.trim() !== '') ? savedDitKey : MorseConfig.KEYBINDING_DEFAULTS.dit;
-            this.currentDahKey = (savedDahKey && savedDahKey.trim() !== '') ? savedDahKey : MorseConfig.KEYBINDING_DEFAULTS.dah;
+            this.currentDitKey = (savedDitKey && savedDitKey.trim() !== '') ? savedDitKey : defaults.ditKey;
+            this.currentDahKey = (savedDahKey && savedDahKey.trim() !== '') ? savedDahKey : defaults.dahKey;
 
             // Basic validation to prevent assigning same key to both paddles
             if (this.currentDitKey === this.currentDahKey) {
                 console.warn(`Loaded keys are identical ('${this.currentDitKey}'). Resetting Dah key to default.`);
-                this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
+                this.currentDahKey = defaults.dahKey;
                 // If default Dah is ALSO the same as Dit (unlikely but possible), reset Dit too
                 if (this.currentDitKey === this.currentDahKey) {
-                    this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
+                    this.currentDitKey = defaults.ditKey;
                 }
-                // No need to save here, let the natural flow handle it or reset explicitly
             }
 
             // Clamp frequency and volume to valid ranges
@@ -697,16 +704,17 @@ class UIManager {
         } catch (e) {
             console.error("Error loading settings:", e);
             // Fallback to defaults on error
-            this.currentWpm = MorseConfig.DEFAULT_WPM;
-            this.isSoundEnabled = true;
-            this.isDarkModeEnabled = false;
-            this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
-            this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
-            this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
-            this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
-            this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
-            this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
-            this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+            const defaults = MorseConfig.ALL_SETTINGS_DEFAULTS;
+            this.currentWpm = defaults.wpm;
+            this.isSoundEnabled = defaults.soundEnabled;
+            this.isDarkModeEnabled = defaults.darkMode;
+            this.currentFrequency = defaults.frequency;
+            this.isHintVisible = defaults.hintVisible;
+            this.currentVolume = defaults.volume;
+            this.currentDitKey = defaults.ditKey;
+            this.currentDahKey = defaults.dahKey;
+            this.isDitManualMode = defaults.ditManual;
+            this.isDahManualMode = defaults.dahManual;
         }
         // UI elements updated in constructor via _updateAllSettingsDisplays()
     }
@@ -721,17 +729,18 @@ class UIManager {
     /** Resets all UI settings elements and internal state to their default values defined in MorseConfig. */
     resetToDefaults() {
         console.log("UIManager: Resetting settings to defaults...");
-        // Reset internal state variables to defaults
-        this.currentWpm = MorseConfig.DEFAULT_WPM;
-        this.currentFrequency = MorseConfig.AUDIO_DEFAULT_TONE_FREQUENCY;
-        this.currentVolume = MorseConfig.AUDIO_DEFAULT_VOLUME;
-        this.currentDitKey = MorseConfig.KEYBINDING_DEFAULTS.dit;
-        this.currentDahKey = MorseConfig.KEYBINDING_DEFAULTS.dah;
-        this.isSoundEnabled = true; // Assuming true is default
-        this.isDarkModeEnabled = false; // Assuming false is default
-        this.isHintVisible = MorseConfig.HINT_DEFAULT_VISIBLE;
-        this.isDitManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
-        this.isDahManualMode = MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+        // Reset internal state variables to defaults from the combined object
+        const defaults = MorseConfig.ALL_SETTINGS_DEFAULTS;
+        this.currentWpm = defaults.wpm;
+        this.currentFrequency = defaults.frequency;
+        this.currentVolume = defaults.volume;
+        this.currentDitKey = defaults.ditKey;
+        this.currentDahKey = defaults.dahKey;
+        this.isSoundEnabled = defaults.soundEnabled;
+        this.isDarkModeEnabled = defaults.darkMode;
+        this.isHintVisible = defaults.hintVisible;
+        this.isDitManualMode = defaults.ditManual;
+        this.isDahManualMode = defaults.dahManual;
 
         // Update all associated UI Elements
         this._updateAllSettingsDisplays();
@@ -744,6 +753,7 @@ class UIManager {
         this._saveSettings();
 
         // Explicitly notify main.js about potential changes from reset
+        // This ensures other modules (AudioPlayer, InputHandler) get the reset values
         if (this.callbacks) {
             if (this.callbacks.onWpmChange) this.callbacks.onWpmChange(this.currentWpm);
             if (this.callbacks.onFrequencyChange) this.callbacks.onFrequencyChange(this.currentFrequency);
@@ -754,6 +764,7 @@ class UIManager {
             if (this.callbacks.onHintToggle) this.callbacks.onHintToggle(this.isHintVisible);
             if (this.callbacks.onDarkModeToggle) this.callbacks.onDarkModeToggle(this.isDarkModeEnabled);
         }
+         console.log("UIManager: Settings reset to defaults and applied.");
     }
 
 
@@ -792,33 +803,38 @@ class UIManager {
 
     /** Applies the visual hint visibility state, respecting the peek state. */
     _applyHintVisibility(visible, startPulse = true) {
+        // visible = the actual setting state (true/false)
         let effectiveVisibility = visible;
-        const reasonPrefix = `applyHintVisibility(visible=${visible}, startPulse=${startPulse})`;
+        const reasonPrefix = `applyHintVisibility(setting=${visible}, peek=${this.isControlHeld}, pulse=${startPulse})`;
 
-        if (this.isControlHeld) { // Peek override
+        if (this.isControlHeld) { // Peek override: force show
             effectiveVisibility = true;
-            this._stopHintPulse(`${reasonPrefix} -> Peek Active`);
+            // console.log(`[Hint Visibility DBG] ${reasonPrefix} -> Peek Active -> Effective=true`);
+            this._stopHintPulse("Peek Active");
         } else {
-            // Handle pulsing based on visibility state
+            // No peek, use the setting value
+            effectiveVisibility = visible;
+            // console.log(`[Hint Visibility DBG] ${reasonPrefix} -> No Peek -> Effective=${visible}`);
             if (!visible) {
-                this._stopHintPulse(`${reasonPrefix} -> Hint Hidden`);
+                this._stopHintPulse("Hint Setting Off");
             } else if (startPulse) {
                 // Start timer only if the target container is actually visible (game UI active)
                 if(this.targetPatternContainer && this.targetPatternContainer.offsetParent !== null) {
                     this._startHintPulseTimer(); // Schedule pulse
                 } else {
-                    this._stopHintPulse(`${reasonPrefix} -> Hint Visible (No Pulse - Container Hidden)`);
+                    this._stopHintPulse("Hint Setting On (No Pulse - Container Hidden)");
                 }
             } else {
-                this._stopHintPulse(`${reasonPrefix} -> Hint Visible (No Initial Pulse)`);
+                this._stopHintPulse("Hint Setting On (No Initial Pulse)");
             }
         }
 
-        // Apply the class to show/hide the hint container content
+        // Apply the class to show/hide the hint container content based on effective visibility
         this.targetPatternOuterWrapper?.classList.toggle('hint-hidden', !effectiveVisibility);
-        // Update ARIA attribute for accessibility
-        this.toggleHintButton?.setAttribute('aria-pressed', String(this.isHintVisible)); // Use actual setting state
+        // Update ARIA attribute for accessibility based on the *setting* state
+        this.toggleHintButton?.setAttribute('aria-pressed', String(this.isHintVisible));
     }
+
 
 
     /** Starts the timer to add the pulsing animation class to hint SVGs. */
@@ -828,19 +844,20 @@ class UIManager {
 
         // Conditions to pulse: SVGs exist, hint container is visually rendered, and hint is not hidden by toggle/peek
         if (!svgs || svgs.length === 0 || this.targetPatternOuterWrapper?.classList.contains('hint-hidden')) {
+             // console.log("[Hint Pulse DBG] Pulse not scheduled: No SVGs or hint visually hidden.");
             return; // Don't schedule if no SVGs or hint is visually hidden
         }
 
         const pulseDelayMs = 2000; // Delay before starting pulse
-        console.log(`[Hint Pulse DBG] Scheduling pulse for ${svgs.length} SVGs in ${pulseDelayMs}ms`);
+        // console.log(`[Hint Pulse DBG] Scheduling pulse for ${svgs.length} SVGs in ${pulseDelayMs}ms`);
         this._hintPulseTimer = setTimeout(() => {
             // Check conditions *again* when timer fires, in case state changed
             const currentSvgs = this.targetPatternContainer?.querySelectorAll('svg');
             if (currentSvgs && currentSvgs.length > 0 && !this.targetPatternOuterWrapper?.classList.contains('hint-hidden')) {
-                console.log("[Hint Pulse DBG] Timeout fired: Adding .hint-svg-pulse class.");
+                // console.log("[Hint Pulse DBG] Timeout fired: Adding .hint-svg-pulse class.");
                 currentSvgs.forEach(svg => svg.classList.add('hint-svg-pulse')); // Apply pulse class
             } else {
-                 console.log("[Hint Pulse DBG] Timeout fired, but SVGs gone or hint now hidden. Pulse cancelled.");
+                 // console.log("[Hint Pulse DBG] Timeout fired, but SVGs gone or hint now hidden. Pulse cancelled.");
             }
             this._hintPulseTimer = null; // Clear timer ID
         }, pulseDelayMs);
@@ -863,9 +880,9 @@ class UIManager {
             svgs.forEach(svg => svg.classList.remove('hint-svg-pulse'));
             removedClassCount = svgs.length;
         }
-        if (stoppedTimer || removedClassCount > 0) {
-            console.log(`[Hint Pulse DBG] Stop Pulse. Reason: ${reason}. Timer cleared: ${stoppedTimer}. Classes removed: ${removedClassCount}.`);
-        }
+        // if (stoppedTimer || removedClassCount > 0) {
+            // console.log(`[Hint Pulse DBG] Stop Pulse. Reason: ${reason}. Timer cleared: ${stoppedTimer}. Classes removed: ${removedClassCount}.`);
+        // }
     }
 
 
@@ -893,30 +910,32 @@ class UIManager {
         // --- End Ignore Conditions ---
 
 
-        // Handle hint peek (Ctrl press)
+        // FIX: Handle hint peek (Ctrl press)
         if (event.key === 'Control' && !this.isControlHeld && isGameVisible) {
-            console.log("[Peek DBG] Ctrl Down Detected. Starting peek.");
+            // console.log("[Peek DBG] Ctrl Down Detected. Starting peek.");
             this.isControlHeld = true;
-            this.hintWasVisibleBeforePeek = this.isHintVisible; // Store original state
-            console.log(`[Peek DBG] Stored hintWasVisibleBeforePeek: ${this.hintWasVisibleBeforePeek}`);
-            console.log("[Peek DBG] Calling _applyHintVisibility(true, false) for peek start.");
-            this._applyHintVisibility(true, false); // Force hint visible, no pulse
+            // Store the *actual* setting state before overriding for peek
+            this.hintWasVisibleBeforePeek = this.isHintVisible;
+            // console.log(`[Peek DBG] Stored hintWasVisibleBeforePeek: ${this.hintWasVisibleBeforePeek}`);
+            // console.log("[Peek DBG] Calling _applyHintVisibility(true, false) for peek start.");
+            // Force the hint to show visually, regardless of the setting state
+            this._applyHintVisibility(true, false); // true = show, false = don't start pulse
         }
     }
 
     /** Handles the global keyup event, primarily for hint peeking. */
     _handleGlobalKeyUp(event) {
-         // Only handle Ctrl keyup for peeking
+         // FIX: Only handle Ctrl keyup for peeking
          if (event.key === 'Control') {
-            console.log("[Peek DBG] Ctrl Up Detected.");
+            // console.log("[Peek DBG] Ctrl Up Detected.");
             if (this.isControlHeld) { // Only act if we were tracking the hold
-                 console.log("[Peek DBG] Was holding Ctrl. Ending peek.");
-                 this.isControlHeld = false; // Reset hold flag
-                 // Restore the original hint visibility state
-                 console.log(`[Peek DBG] Restoring hint visibility to: ${this.hintWasVisibleBeforePeek}`);
-                 this._applyHintVisibility(this.hintWasVisibleBeforePeek); // Restore state, allow pulse if it was visible
+                 // console.log("[Peek DBG] Was holding Ctrl. Ending peek.");
+                 this.isControlHeld = false; // Reset hold flag FIRST
+                 // Restore the display based on the state *before* peek started
+                 // console.log(`[Peek DBG] Restoring hint visibility to: ${this.hintWasVisibleBeforePeek}`);
+                 this._applyHintVisibility(this.hintWasVisibleBeforePeek, true); // Restore state, allow pulse if it was visible
             } else {
-                 console.log("[Peek DBG] Ctrl Up, but wasn't tracking hold (isControlHeld=false).");
+                 // console.log("[Peek DBG] Ctrl Up, but wasn't tracking hold (isControlHeld=false).");
             }
          }
     }
@@ -978,6 +997,7 @@ class UIManager {
 
         const newKey = event.key;
         const type = this.keyInputCurrentlyListening;
+        const inputElement = (type === 'dit') ? this.ditKeyInput : this.dahKeyInput; // Get reference
         let isValid = true;
         let errorMessage = "";
 
@@ -985,8 +1005,11 @@ class UIManager {
 
         // --- Validation ---
         if (newKey.trim() === '' || newKey === ' ') { isValid = false; errorMessage = "Key cannot be empty or space."; }
-        else if (type === 'dit' && newKey === this.currentDahKey) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dah.`; }
-        else if (type === 'dah' && newKey === this.currentDitKey) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dit.`; }
+        else if (type === 'dit' && newKey.toLowerCase() === this.currentDahKey.toLowerCase()) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dah.`; }
+        else if (type === 'dah' && newKey.toLowerCase() === this.currentDitKey.toLowerCase()) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dit.`; }
+        // Prevent assigning modifier keys alone? (Optional but good practice)
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(newKey)) { isValid = false; errorMessage = "Cannot assign modifier keys alone."; }
+
 
         // --- Update or Reject ---
         if (isValid) {
@@ -1001,13 +1024,12 @@ class UIManager {
              if (this.callbacks && this.callbacks.onKeyMappingChange) {
                 this.callbacks.onKeyMappingChange({ dit: this.currentDitKey, dah: this.currentDahKey });
              }
-             inputElement.blur(); // Remove focus after successful set
+             if (inputElement) inputElement.blur(); // Remove focus after successful set
 
         } else {
             console.warn(`Key mapping: Invalid key "${newKey}" for ${type}. Reason: ${errorMessage}`);
             alert(`Invalid key: ${errorMessage}`);
             // Keep the input in listening state visually
-            const inputElement = (type === 'dit') ? this.ditKeyInput : this.dahKeyInput;
             if (inputElement) inputElement.value = "Listening...";
         }
     }
@@ -1064,6 +1086,8 @@ class UIManager {
         this.soundToggle?.addEventListener('change', (e) => { this.isSoundEnabled = e.target.checked; this._saveSettings(); if (callbacks.onSoundToggle) callbacks.onSoundToggle(this.isSoundEnabled); });
         // Dark Mode Toggle
         this.darkModeToggle?.addEventListener('change', (e) => { this.isDarkModeEnabled = e.target.checked; this._applyDarkMode(this.isDarkModeEnabled); this._saveSettings(); if (callbacks.onDarkModeToggle) callbacks.onDarkModeToggle(this.isDarkModeEnabled); });
+        // Reset Settings Button (NEW)
+        this.resetSettingsButton?.addEventListener('click', () => { if (callbacks.onResetSettings) callbacks.onResetSettings(); });
         // Reset Progress Button
         this.resetProgressButton?.addEventListener('click', () => { if (callbacks.onResetProgress) callbacks.onResetProgress(); });
         // Key Mapping Inputs
@@ -1121,8 +1145,8 @@ class UIManager {
     getInitialVolume() { return this.currentVolume; }
     getCurrentDitKey() { return this.currentDitKey; }
     getCurrentDahKey() { return this.currentDahKey; }
-    getCurrentDitManualState() { return this.isDitManualMode; }
-    getCurrentDahManualState() { return this.isDahManualMode; }
+    getCurrentDitManualState() { return this.isDitManualMode; } // Checked = true = Manual
+    getCurrentDahManualState() { return this.isDahManualMode; } // Checked = true = Manual
     getCurrentManualModeState() { return { ditManual: this.isDitManualMode, dahManual: this.isDahManualMode }; }
     getPlaybackSentence() { return this.playbackInput ? this.playbackInput.value : ""; }
     getSandboxSentence() { return this.sandboxInput ? this.sandboxInput.value : ""; }

@@ -5,6 +5,7 @@
  * Styling for the draggable modal window. Ensures theme variables are applied.
  * Fixes potential text selection during drag.
  * Adds styling for manual mode toggles.
+ * Adds styling for visual setting groups and new Reset Settings button.
  */
 
  .modal {
@@ -79,66 +80,15 @@
     overflow-y: auto;
 }
 
-/* Style elements inside modal consistently */
-.modal-content label {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 1.1em;
-    margin-bottom: -5px;
-    color: inherit; /* Inherit from modal */
-}
-
-.modal-content input[type="range"] {
-    width: 100%;
-    cursor: pointer;
-    accent-color: var(--button-primary-bg); /* Use theme color */
-}
-
-/* Add styles for range thumb/track if needed, using variables */
-.modal-content input[type="range"]::-webkit-slider-thumb {
-    background: var(--button-primary-bg);
-}
-.modal-content input[type="range"]::-moz-range-thumb {
-     background: var(--button-primary-bg);
-}
-/* ... add more vendor prefixes if necessary */
-
-
-.modal-content .settings-toggle-row {
-     width: 100%;
-     display: flex;
-     justify-content: space-between;
-     align-items: center;
-     margin-top: 5px;
-     padding-left: 10px; /* Indent toggle rows */
-}
-
-.modal-content .settings-toggle-row label {
-    margin-bottom: 0;
-    width: auto; /* Let label take its content width */
-    justify-content: flex-start; /* Align label text left */
-    color: inherit; /* Inherit from modal */
-}
-
-.modal-content input[type="checkbox"] {
-    transform: scale(1.4);
-    cursor: pointer;
-    accent-color: var(--button-primary-bg); /* Use theme color */
-    margin-left: auto; /* Push checkbox to the right */
-    flex-shrink: 0;
-}
-
-/* Style for toggle groups like Paddle Mode */
-.settings-toggle-group {
+/* NEW: Styling for generic settings group */
+.settings-group {
     border: 1px solid var(--border-color);
     border-radius: 5px;
-    padding: 8px 10px 10px 10px; /* Add some internal padding */
-    margin-top: 10px;
+    padding: 10px 12px;
+    margin-bottom: 5px; /* Consistent bottom margin */
     display: flex;
     flex-direction: column;
-    gap: 8px; /* Space between label and rows */
+    gap: 10px; /* Space between items within group */
 }
 
 .settings-group-label {
@@ -148,41 +98,106 @@
     margin-bottom: 5px; /* Space below group label */
     display: block; /* Make it block level */
     width: 100%;
+    border-bottom: 1px dashed var(--border-color); /* Separator */
+    padding-bottom: 5px;
+    margin-bottom: 8px; /* Increased space after label */
 }
 
-/* Adjust spacing for toggle rows within a group */
-.settings-toggle-group .settings-toggle-row {
-    margin-top: 0;
-    padding-left: 0; /* Remove extra indent within group */
+/* Adjustments for items inside a group */
+.settings-group label {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1em;
+    margin-bottom: -5px;
+    color: inherit; /* Inherit from modal */
+}
+
+.settings-group input[type="range"] {
+    width: 100%;
+    cursor: pointer;
+    accent-color: var(--button-primary-bg); /* Use theme color */
+    margin-top: 2px; /* Small space above slider */
+}
+
+.settings-group .settings-toggle-row {
+     width: 100%;
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+     margin-top: 0; /* Remove extra top margin */
+     padding-left: 0; /* Remove extra indent */
+}
+
+.settings-group .settings-toggle-row label {
+    margin-bottom: 0;
+    width: auto; /* Let label take its content width */
+    justify-content: flex-start; /* Align label text left */
+    color: inherit; /* Inherit from modal */
+}
+
+.settings-group input[type="checkbox"] {
+    transform: scale(1.4);
+    cursor: pointer;
+    accent-color: var(--button-primary-bg); /* Use theme color */
+    margin-left: auto; /* Push checkbox to the right */
+    flex-shrink: 0;
 }
 
 
-.modal-content button {
+/* Key mapping row adjustment within group */
+.settings-group .key-mapping-row {
+    margin-bottom: 5px; /* Reduce bottom margin for key rows */
+}
+
+/* Style range thumbs/track if needed, using variables */
+.modal-content input[type="range"]::-webkit-slider-thumb {
+    background: var(--button-primary-bg);
+}
+.modal-content input[type="range"]::-moz-range-thumb {
+     background: var(--button-primary-bg);
+}
+/* ... add more vendor prefixes if necessary */
+
+/* Styling for Button Group */
+.settings-group.button-group {
+    border: none; /* Remove border for button-only group */
+    padding: 5px 0 0 0; /* Adjust padding */
+    gap: 10px; /* Space between buttons */
+}
+
+/* General style for buttons within modal content */
+.settings-action-button {
     width: 100%;
     padding: 10px 15px;
-    /* Use theme button variables */
-    background-color: var(--button-reset-bg);
     border: 1px solid var(--border-color);
-    color: var(--text-color);
     border-radius: 5px;
     cursor: pointer;
     font-size: 1.1em;
     transition: background-color 0.2s ease, color 0.3s ease, border-color 0.3s ease;
-    margin-top: 10px;
+    text-align: center;
 }
 
-.modal-content button:hover {
-    background-color: var(--button-reset-hover-bg);
+/* NEW: Reset Settings Button Style */
+#reset-settings-button {
+    background-color: var(--button-secondary-bg); /* Use secondary color */
+    color: var(--button-text-color);
+    border-color: var(--border-color);
 }
 
-/* Specific button styling */
-.modal-content #reset-progress-button {
-    background-color: var(--char-incorrect-bg); /* Use incorrect theme color */
+#reset-settings-button:hover {
+    background-color: var(--button-secondary-hover-bg);
+}
+
+/* Reset Progress Button Specific Style */
+#reset-progress-button {
+    background-color: var(--char-incorrect-bg); /* Use danger theme color */
     color: var(--char-incorrect-color);
     border-color: transparent; /* Or make it match bg */
 }
 
-.modal-content #reset-progress-button:hover {
+#reset-progress-button:hover {
     filter: brightness(0.9);
     background-color: var(--char-incorrect-bg); /* Keep bg on hover */
 }

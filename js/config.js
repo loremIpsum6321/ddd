@@ -5,6 +5,7 @@
  * Global configuration settings for the Dit-Dah-Dash game.
  * Includes Morse code mappings, level data, timing defaults, audio defaults,
  * storage keys, UI settings, and keybinding/paddle mode settings.
+ * UPDATE: Changed PADDLE_MODE_DEFAULTS to have Manual=false by default (Auto).
  */
 
 // --- Morse Code Mapping ---
@@ -300,11 +301,12 @@ const LEVELS_DATA = [
 ];
 
 // --- Audio Configuration ---
-const AUDIO_DEFAULT_TONE_FREQUENCY = 400; // Default frequency in Hz
+const AUDIO_DEFAULT_TONE_FREQUENCY = 600; // Default frequency in Hz (Example: Set back to 600)
 const AUDIO_RAMP_TIME = 0.005; // Fade in/out time for tones (seconds)
-const AUDIO_MIN_FREQUENCY = 200; // Minimum adjustable frequency
+const AUDIO_MIN_FREQUENCY = 400; // Minimum adjustable frequency
 const AUDIO_MAX_FREQUENCY = 1000; // Maximum adjustable frequency
 const AUDIO_DEFAULT_VOLUME = 1.0; // Default volume (0.0 to 1.0)
+const AUDIO_SOUND_ENABLED_DEFAULT = true; // Sound is ON by default
 
 // --- Scoring ---
 const INCORRECT_ATTEMPT_PENALTY = 0.1;
@@ -330,11 +332,16 @@ const getKeyDisplay = (key) => {
 };
 
 // --- Paddle Input Mode ---
-// Default mode: false = Automatic (Iambic/Repeat), true = Manual
+// UPDATE: Default mode: false = Automatic (Iambic/Repeat), true = Manual
 const PADDLE_MODE_DEFAULTS = {
-    ditManual: false,
-    dahManual: false
+    ditManual: false, // Auto Dit is default
+    dahManual: false  // Auto Dah is default
 };
+
+// --- UI ---
+const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
+const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
+const DARK_MODE_DEFAULT = false; // Dark mode is OFF by default
 
 // --- Local Storage Keys ---
 const STORAGE_KEY_PREFIX = 'ditDahDash_';
@@ -354,9 +361,20 @@ const STORAGE_KEY_SETTINGS_DIT_MANUAL = `${STORAGE_KEY_PREFIX}settingsDitManual`
 const STORAGE_KEY_SETTINGS_DAH_MANUAL = `${STORAGE_KEY_PREFIX}settingsDahManual`;
 
 
-// --- UI ---
-const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
-const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
+// --- Combine ALL Default Settings into one object for easier Reset ---
+const ALL_SETTINGS_DEFAULTS = {
+    wpm: DEFAULT_WPM,
+    frequency: AUDIO_DEFAULT_TONE_FREQUENCY,
+    soundEnabled: AUDIO_SOUND_ENABLED_DEFAULT,
+    volume: AUDIO_DEFAULT_VOLUME,
+    darkMode: DARK_MODE_DEFAULT,
+    hintVisible: HINT_DEFAULT_VISIBLE,
+    ditKey: KEYBINDING_DEFAULTS.dit,
+    dahKey: KEYBINDING_DEFAULTS.dah,
+    ditManual: PADDLE_MODE_DEFAULTS.ditManual,
+    dahManual: PADDLE_MODE_DEFAULTS.dahManual
+};
+
 
 // --- Make config globally accessible ---
 // Grouping related constants for clarity
@@ -376,7 +394,7 @@ window.MorseConfig = {
     // Audio
     AUDIO_DEFAULT_TONE_FREQUENCY, AUDIO_RAMP_TIME,
     AUDIO_MIN_FREQUENCY, AUDIO_MAX_FREQUENCY,
-    AUDIO_DEFAULT_VOLUME,
+    AUDIO_DEFAULT_VOLUME, AUDIO_SOUND_ENABLED_DEFAULT,
 
     // Scoring
     INCORRECT_ATTEMPT_PENALTY,
@@ -386,6 +404,14 @@ window.MorseConfig = {
     KEYBIND_DISPLAY_MAP,
     getKeyDisplay,
     PADDLE_MODE_DEFAULTS, // Export paddle mode defaults
+
+    // UI Feedback & Defaults
+    INCORRECT_FLASH_DURATION,
+    HINT_DEFAULT_VISIBLE,
+    DARK_MODE_DEFAULT,
+
+    // Combined Defaults Object (for Reset)
+    ALL_SETTINGS_DEFAULTS,
 
     // Storage Keys
     STORAGE_KEY_PREFIX, // Export prefix for potential other uses
@@ -398,10 +424,6 @@ window.MorseConfig = {
     STORAGE_KEY_PADDLE_TEXTURES,
     STORAGE_KEY_SETTINGS_DIT_MANUAL, // Export manual mode keys
     STORAGE_KEY_SETTINGS_DAH_MANUAL,
-
-    // UI Feedback & Defaults
-    INCORRECT_FLASH_DURATION,
-    HINT_DEFAULT_VISIBLE,
 };
 
 // Function to get the current keybindings, checking localStorage or using defaults
@@ -409,7 +431,7 @@ window.getCurrentKeybindings = () => {
     let ditKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
     let dahKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
 
-    // Use defaults if localStorage values are null, empty, or invalid (e.g., space)
+    // Use defaults if localStorage values are null, empty, or invalid
     if (!ditKey || ditKey.trim() === '') {
         ditKey = window.MorseConfig.KEYBINDING_DEFAULTS.dit;
     }
@@ -425,6 +447,7 @@ window.getCurrentManualMode = () => {
     const ditManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
     const dahManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
 
+    // Use defaults if localStorage values are null
     const ditManual = ditManualSaved !== null ? JSON.parse(ditManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
     const dahManual = dahManualSaved !== null ? JSON.parse(dahManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
 
