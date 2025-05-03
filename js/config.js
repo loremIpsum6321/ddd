@@ -337,14 +337,14 @@ const getKeyDisplay = (key) => {
 // --- Paddle Input Mode ---
 // UPDATE: Default mode: false = Automatic (Iambic/Repeat), true = Manual
 const PADDLE_MODE_DEFAULTS = {
-    ditManual: false, // Default to Auto (False)
-    dahManual: false  // Default to Auto (False)
+    ditManual: true, // Default to manual (True)
+    dahManual: true  // Default to manual (True)
 };
 
 // --- UI ---
 const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
 const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
-const DARK_MODE_DEFAULT = false; // Dark mode is OFF by default
+const DARK_MODE_DEFAULT = true; // Dark mode is OFF by default
 
 // --- Sandbox Mode ---
 // REMOVED: const DEFAULT_SANDBOX_SENTENCE = "HELLO WORLD";
