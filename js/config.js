@@ -1,11 +1,14 @@
-/* Dit-Dah-Dash/js/config.js */
+/* File: js/config.js */
 /**
  * js/config.js
  * --------------
  * Global configuration settings for the Dit-Dah-Dash game.
  * Includes Morse code mappings, level data, timing defaults, audio defaults,
  * storage keys, UI settings, and keybinding/paddle mode settings.
- * UPDATE: Changed PADDLE_MODE_DEFAULTS to have Manual=false by default (Auto).
+ * Version History:
+ * - v1.0 - Initial creation.
+ * - v1.1 - Changed PADDLE_MODE_DEFAULTS to have Manual=false by default (Auto).
+ * - v1.2 (WebDevPro) - Removed DEFAULT_SANDBOX_SENTENCE as it's replaced by js/sandboxSentences.js.
  */
 
 // --- Morse Code Mapping ---
@@ -301,7 +304,7 @@ const LEVELS_DATA = [
 ];
 
 // --- Audio Configuration ---
-const AUDIO_DEFAULT_TONE_FREQUENCY = 600; // Default frequency in Hz (Example: Set back to 600)
+const AUDIO_DEFAULT_TONE_FREQUENCY = 600; // Default frequency in Hz
 const AUDIO_RAMP_TIME = 0.005; // Fade in/out time for tones (seconds)
 const AUDIO_MIN_FREQUENCY = 400; // Minimum adjustable frequency
 const AUDIO_MAX_FREQUENCY = 1000; // Maximum adjustable frequency
@@ -334,8 +337,8 @@ const getKeyDisplay = (key) => {
 // --- Paddle Input Mode ---
 // UPDATE: Default mode: false = Automatic (Iambic/Repeat), true = Manual
 const PADDLE_MODE_DEFAULTS = {
-    ditManual: false, // Auto Dit is default
-    dahManual: false  // Auto Dah is default
+    ditManual: false, // Default to Auto (False)
+    dahManual: false  // Default to Auto (False)
 };
 
 // --- UI ---
@@ -343,10 +346,15 @@ const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
 const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
 const DARK_MODE_DEFAULT = false; // Dark mode is OFF by default
 
+// --- Sandbox Mode ---
+// REMOVED: const DEFAULT_SANDBOX_SENTENCE = "HELLO WORLD";
+// Sandbox now uses random sentences from js/sandboxSentences.js
+
 // --- Local Storage Keys ---
 const STORAGE_KEY_PREFIX = 'ditDahDash_';
-const STORAGE_KEY_HIGH_SCORES = `${STORAGE_KEY_PREFIX}highScores`;
-const STORAGE_KEY_UNLOCKED_LEVELS = `${STORAGE_KEY_PREFIX}unlockedLevels`;
+const STORAGE_KEY_HIGH_SCORES = `${STORAGE_KEY_PREFIX}highScores`;         // Progress Key
+const STORAGE_KEY_UNLOCKED_LEVELS = `${STORAGE_KEY_PREFIX}unlockedLevels`; // Progress Key
+// --- Settings Keys ---
 const STORAGE_KEY_SETTINGS_WPM = `${STORAGE_KEY_PREFIX}settingsWpm`;
 const STORAGE_KEY_SETTINGS_SOUND = `${STORAGE_KEY_PREFIX}settingsSound`;
 const STORAGE_KEY_SETTINGS_DARK_MODE = `${STORAGE_KEY_PREFIX}settingsDarkMode`;
@@ -355,7 +363,7 @@ const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`;
 const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`;
 const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`;
 const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`;
-const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`;
+const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`; // Cosmetic Setting
 // New keys for Manual Mode
 const STORAGE_KEY_SETTINGS_DIT_MANUAL = `${STORAGE_KEY_PREFIX}settingsDitManual`;
 const STORAGE_KEY_SETTINGS_DAH_MANUAL = `${STORAGE_KEY_PREFIX}settingsDahManual`;
@@ -371,8 +379,9 @@ const ALL_SETTINGS_DEFAULTS = {
     hintVisible: HINT_DEFAULT_VISIBLE,
     ditKey: KEYBINDING_DEFAULTS.dit,
     dahKey: KEYBINDING_DEFAULTS.dah,
-    ditManual: PADDLE_MODE_DEFAULTS.ditManual,
-    dahManual: PADDLE_MODE_DEFAULTS.dahManual
+    ditManual: PADDLE_MODE_DEFAULTS.ditManual, // Reflects new default
+    dahManual: PADDLE_MODE_DEFAULTS.dahManual, // Reflects new default
+    // paddleTextures: { dit: null, dah: null } // Texture is cosmetic, not included in typical reset
 };
 
 
@@ -403,30 +412,38 @@ window.MorseConfig = {
     KEYBINDING_DEFAULTS,
     KEYBIND_DISPLAY_MAP,
     getKeyDisplay,
-    PADDLE_MODE_DEFAULTS, // Export paddle mode defaults
+    PADDLE_MODE_DEFAULTS, // Export updated paddle mode defaults
 
     // UI Feedback & Defaults
     INCORRECT_FLASH_DURATION,
     HINT_DEFAULT_VISIBLE,
     DARK_MODE_DEFAULT,
 
+    // Sandbox (Default sentence removed)
+    // DEFAULT_SANDBOX_SENTENCE,
+
     // Combined Defaults Object (for Reset)
     ALL_SETTINGS_DEFAULTS,
 
-    // Storage Keys
-    STORAGE_KEY_PREFIX, // Export prefix for potential other uses
+    // Storage Keys (Separated for clarity)
+    STORAGE_KEY_PREFIX,
+    // Progress Keys
     STORAGE_KEY_HIGH_SCORES, STORAGE_KEY_UNLOCKED_LEVELS,
+    // Settings Keys
     STORAGE_KEY_SETTINGS_WPM, STORAGE_KEY_SETTINGS_SOUND,
     STORAGE_KEY_SETTINGS_DARK_MODE, STORAGE_KEY_SETTINGS_FREQUENCY,
     STORAGE_KEY_SETTINGS_VOLUME,
     STORAGE_KEY_SETTINGS_DIT_KEY, STORAGE_KEY_SETTINGS_DAH_KEY,
     STORAGE_KEY_SETTINGS_HINT_VISIBLE,
-    STORAGE_KEY_PADDLE_TEXTURES,
+    STORAGE_KEY_PADDLE_TEXTURES, // Cosmetic setting
     STORAGE_KEY_SETTINGS_DIT_MANUAL, // Export manual mode keys
     STORAGE_KEY_SETTINGS_DAH_MANUAL,
 };
 
-// Function to get the current keybindings, checking localStorage or using defaults
+/**
+ * Function to get the current keybindings, checking localStorage or using defaults.
+ * @returns {{dit: string, dah: string}} The current keybindings.
+ */
 window.getCurrentKeybindings = () => {
     let ditKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
     let dahKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
@@ -442,12 +459,15 @@ window.getCurrentKeybindings = () => {
     return { dit: ditKey, dah: dahKey };
 };
 
-// Function to get current manual mode settings
+/**
+ * Function to get current manual mode settings from localStorage or defaults.
+ * @returns {{ditManual: boolean, dahManual: boolean}} The current manual mode settings.
+ */
 window.getCurrentManualMode = () => {
     const ditManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
     const dahManualSaved = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
 
-    // Use defaults if localStorage values are null
+    // Use updated defaults from MorseConfig.PADDLE_MODE_DEFAULTS
     const ditManual = ditManualSaved !== null ? JSON.parse(ditManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
     const dahManual = dahManualSaved !== null ? JSON.parse(dahManualSaved) : window.MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
 

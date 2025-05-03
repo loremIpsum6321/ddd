@@ -27,7 +27,7 @@
                  <div id="target-pattern-outer-wrapper">
                      <div id="target-pattern-container" class="pattern-container">
                         </div>
-                     <button id="toggle-hint-button" class="hint-toggle" title="Toggle Hint Visibility" aria-pressed="true">
+                     <button id="toggle-hint-button" class="hint-toggle" title="Toggle Hint Visibility (Hold Ctrl to Peek)" aria-pressed="true">
                          <svg class="icon-visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                            <circle cx="12" cy="12" r="3"></circle>
@@ -67,9 +67,9 @@
             <div id="sandbox-area" class="hidden">
                 <button id="sandbox-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                 <h2>Custom Sentence Sandbox</h2>
-                <label for="sandbox-input">Enter your sentence:</label>
-                <input type="text" id="sandbox-input" placeholder="Type sentence here...">
-                <button id="start-sandbox-button">Start Practice</button>
+                <label for="sandbox-input">Enter your sentence (Not used for start):</label>
+                <input type="text" id="sandbox-input" placeholder="A random sentence will be selected" readonly>
+                <button id="start-sandbox-button">Start Random Sentence Practice</button>
                 <div id="sandbox-morse-preview" title="Morse Preview (for reference)"></div>
             </div>
 
@@ -94,7 +94,7 @@
                     <p id="results-accuracy"></p>
                 </div>
                 <p id="level-unlock-message"></p>
-                <p class="results-instructions">Press <span class="key-hint">Dit</span> (Retry) or <span class="key-hint">Dah</span> (Next)</p>
+                <p class="results-instructions">Press <span class="key-hint">.</span> (Retry) or <span class="key-hint">-</span> (Next)</p>
             </div>
 
             <div id="level-selection-screen" class="hidden overlay">
@@ -183,8 +183,7 @@
     <script src="js/scoreCalculator.js"></script>
     <script src="js/levelManager.js"></script>
     <script src="js/morseDecoder.js"></script>
-    <script src="js/uiManager.js"></script>
+    <script src="js/sandboxSentences.js"></script> <script src="js/uiManager.js"></script>
     <script src="js/inputHandler.js"></script>
-    <script src="js/main.js"></script>
-</body>
+    <script src="js/main.js"></script> </body>
 </html>

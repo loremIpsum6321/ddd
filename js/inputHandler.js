@@ -9,6 +9,9 @@
  * Triggers discrete audio tones for each generated Morse element.
  * Handles results screen input.
  * Uses dynamically configurable keybindings and paddle modes.
+ * v1.0 - Initial creation.
+ * v1.1 - Updated paddle mode logic to align with Checked=Manual=true.
+ * v1.2 - Minor refactoring of state checks for clarity.
  */
 
 class InputHandler {
@@ -47,7 +50,7 @@ class InputHandler {
             dah: initialKeyMappings?.dah || MorseConfig.KEYBINDING_DEFAULTS.dah
         };
 
-        // Manual Mode State
+        // Manual Mode State (true = Manual, false = Auto)
         this.isDitManual = initialManualModes?.ditManual ?? MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
         this.isDahManual = initialManualModes?.dahManual ?? MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
 
@@ -61,7 +64,7 @@ class InputHandler {
         this.pressStartTime = { dit: 0, dah: 0 };
         this.lastInputTypeGenerated = null; // Used by auto mode
         this.lastEmitTime = 0; // Used by auto mode
-        this.queuedInput = null; // Used by auto mode (and manual?)
+        this.queuedInput = null; // Used by auto mode queue
         this.repeatOrIambicTimerId = null; // Used by auto mode
 
         // Track active touch identifiers
@@ -99,13 +102,23 @@ class InputHandler {
         }
     }
 
-    /** Updates the manual mode settings used by the input handler. */
+    /**
+     * Updates the manual mode settings used by the input handler.
+     * @param {object} newModes - Object with { ditManual: boolean, dahManual: boolean }
+     */
     updateManualMode(newModes) {
         if (newModes && typeof newModes.ditManual === 'boolean' && typeof newModes.dahManual === 'boolean') {
+            const changed = this.isDitManual !== newModes.ditManual || this.isDahManual !== newModes.dahManual;
             this.isDitManual = newModes.ditManual;
             this.isDahManual = newModes.dahManual;
             console.log("InputHandler Manual Modes Updated:", { dit: this.isDitManual, dah: this.isDahManual });
-            // Reset auto mode state if switching modes while active? Maybe not necessary.
+            // If modes changed while a paddle was active, might need state reset
+            if (changed) {
+                this._clearRepeatOrIambicTimer();
+                this.queuedInput = null;
+                this.audioPlayer.stopInputTone(); // Stop any ongoing tone if mode changed
+                this._processInputStateChange(); // Re-evaluate state based on new modes
+            }
         } else {
             console.warn("InputHandler: Invalid manual mode object received.", newModes);
         }
@@ -128,7 +141,7 @@ class InputHandler {
         const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                                    (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
-        const isManual = (type === 'dit' && this.isDitManual) || (type === 'dah' && this.isDahManual);
+        const isPaddleManual = (type === 'dit' && this.isDitManual) || (type === 'dah' && this.isDahManual);
 
         // Initialize audio context if needed
         if (isGameInputContext || isResultsContext) {
@@ -159,11 +172,11 @@ class InputHandler {
              this.audioPlayer.playInputTone(type); // Play tone immediately
              if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type); // Trigger action immediately
 
-        } else if (isGameInputContext && isManual) {
+        } else if (isGameInputContext && isPaddleManual) {
              // --- MANUAL MODE ---
-             // Cancel any pending decode from auto mode (just in case)
+             // Cancel any pending decode from other modes
              this.decoder.cancelScheduledDecode();
-             // Stop any ongoing auto-mode tone
+             // Stop any ongoing auto-mode tone (from other paddle?)
              this.audioPlayer.stopInputTone();
              // Clear auto mode queue
              this.queuedInput = null;
@@ -176,8 +189,7 @@ class InputHandler {
              // Start game timer if needed
              if (this.gameState.status === GameStatus.READY) {
                  if (this.gameState.startTimer()) {
-                     // Optional: Start a simplified timer update if needed for manual mode?
-                     // startGameUpdateTimer(); // Assuming this exists in main.js
+                    // Optional: startGameUpdateTimer(); // If needed for manual mode UI updates
                  }
              }
              // Ensure state reflects typing
@@ -186,15 +198,12 @@ class InputHandler {
              }
 
 
-        } else if (isGameInputContext && !isManual) {
+        } else if (isGameInputContext && !isPaddleManual) {
              // --- AUTO MODE ---
              // Check for audio busy / queueing (specific to auto mode)
              if (this.audioPlayer.inputToneNode) {
                  if (this.queuedInput === null) {
                      this.queuedInput = type;
-                     // console.log(`Auto Audio busy on press, queued: ${type}`);
-                 } else {
-                     // console.log(`Auto Audio busy on press, queue full. Ignored: ${type}`);
                  }
                  // Return here for auto mode if audio is busy
                  return;
@@ -203,7 +212,7 @@ class InputHandler {
              // Standard Auto Mode Press Processing
              const now = performance.now();
              this.pressStartTime[type] = now;
-             this.decoder.cancelScheduledDecode();
+             this.decoder.cancelScheduledDecode(); // Cancel pending decode if starting new auto sequence
              this._processInputStateChange(); // Trigger iambic/repeat logic
 
         } else {
@@ -217,7 +226,7 @@ class InputHandler {
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                               (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
-        const isManual = (type === 'dit' && this.isDitManual) || (type === 'dah' && this.isDahManual);
+        const isPaddleManual = (type === 'dit' && this.isDitManual) || (type === 'dah' && this.isDahManual);
 
         // --- State Tracking (Set pressed flag regardless of mode) ---
         let stateChanged = false;
@@ -239,41 +248,26 @@ class InputHandler {
         if (isResultsContext) {
             // No action needed on release for results screen
 
-        } else if (isGameContext && isManual) {
+        } else if (isGameContext && isPaddleManual) {
             // --- MANUAL MODE ---
-            // Stop the tone if it was playing *for this specific paddle*
-            // Note: AudioPlayer handles its own tone stopping generally, but maybe force here?
-            // Let's assume tone plays for its duration naturally unless interrupted by another press.
-            // The main thing is to schedule the decode attempt.
+            // Manual paddle released. Schedule decode if NO paddles are active anymore.
+            const isDitPaddleActive = this.ditPressed || this.ditKeyPressed;
+            const isDahPaddleActive = this.dahPressed || this.dahKeyPressed;
 
-            // If BOTH paddles are manual and neither is pressed, schedule decode
-            const otherType = (type === 'dit') ? 'dah' : 'dit';
-            const isOtherManual = (otherType === 'dit' && this.isDitManual) || (otherType === 'dah' && this.isDahManual);
-            const isOtherActive = (otherType === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-
-            if (!isStillActive && isManual && (!isOtherActive || !isOtherManual)) {
-                // Schedule decode only if this paddle (manual) is released AND
-                // the other paddle is either not active OR not manual
-                // This prevents decode if switching between two manual paddles rapidly.
-                // Let's refine: Schedule decode if NO paddles are active OR if the only active paddle is AUTO.
-                 const isDitPaddleActive = this.ditPressed || this.ditKeyPressed;
-                 const isDahPaddleActive = this.dahPressed || this.dahKeyPressed;
-                 const shouldSchedule = (!isDitPaddleActive && !isDahPaddleActive) || // No paddles active
-                                       (isDitPaddleActive && !this.isDitManual && !isDahPaddleActive) || // Only Dit active and it's Auto
-                                       (isDahPaddleActive && !this.isDahManual && !isDitPaddleActive); // Only Dah active and it's Auto
-
-                 if (shouldSchedule && this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
+            if (!isDitPaddleActive && !isDahPaddleActive) {
+                // Schedule decode only if NO paddles are active (manual or auto)
+                 if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
                      this._scheduleDecodeAfterDelay();
-                 } else if (shouldSchedule && this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                 } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                    // If sequence empty, just revert to listening
                     this.gameState.status = GameStatus.LISTENING;
                  }
             }
 
-        } else if (isGameContext && !isManual) {
+        } else if (isGameContext && !isPaddleManual) {
             // --- AUTO MODE ---
-            // Handle potential queue processing if applicable
+            // Handle potential queue processing if applicable (audio became free on release)
             if (this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
-                // console.log("Auto Release detected queue processing opportunity.");
                 this.handleToneEnd(); // Process queue if audio free
             }
              // Trigger standard auto mode state processing
@@ -316,8 +310,9 @@ class InputHandler {
         const isOtherInputFocused = !isKeyMapInputFocused && (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA');
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
 
+        // Ignore if focus is on other inputs, or settings modal (unless key mapping input)
         if (isOtherInputFocused || (isSettingsOpen && !isKeyMapInputFocused)) return;
-        if (isKeyMapInputFocused) return; // Let UIManager handle key mapping
+        if (isKeyMapInputFocused) return; // Let UIManager handle key mapping capture
 
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
@@ -343,8 +338,9 @@ class InputHandler {
         const isOtherInputFocused = !isKeyMapInputFocused && (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA');
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
 
+        // Ignore if focus is on other inputs, or settings modal (unless key mapping input)
         if (isOtherInputFocused || (isSettingsOpen && !isKeyMapInputFocused)) return;
-        if (isKeyMapInputFocused) return; // Let UIManager handle key mapping
+        if (isKeyMapInputFocused) return; // Let UIManager handle key mapping capture
 
         const releasedKey = event.key;
         const isDitKey = releasedKey.toLowerCase() === this.keyMappings.dit.toLowerCase();
@@ -366,19 +362,20 @@ class InputHandler {
          const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                                     (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
 
-         // If either paddle is manual, this logic shouldn't run fully, but check which paddles are active *for auto mode*.
+         // Check which paddles are active *and* set to AUTO mode
          const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
          const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
 
-         // If not in game context OR if *no* auto paddles are active, cleanup and exit.
+         // --- Exit Conditions ---
+         // 1. Not in game context
+         // 2. No AUTO paddles are currently active
          if (!isGameInputContext || (!isDitAutoActive && !isDahAutoActive)) {
             this._clearRepeatOrIambicTimer();
             this.lastEmitTime = 0;
-            // Don't reset queue here, might be needed by manual release? Reconsider.
-            // this.queuedInput = null;
             this.gameState.isIambicHandling = false;
             this.gameState.iambicState = null;
-            // If no paddles active *at all* and we were typing, schedule decode
+
+            // Schedule decode if NO paddles (manual or auto) are active anymore
             const isDitActive = this.ditPressed || this.ditKeyPressed;
             const isDahActive = this.dahPressed || this.dahKeyPressed;
             if (!isDitActive && !isDahActive) {
@@ -391,9 +388,10 @@ class InputHandler {
             return;
          }
 
-        // --- Auto Mode Logic Continues ---
-        this._clearRepeatOrIambicTimer();
+         // --- Auto Mode Logic Continues ---
+         this._clearRepeatOrIambicTimer(); // Clear any existing timer before setting new one
 
+         // If an auto paddle is pressed while decoding, switch back to typing
          if ((isDitAutoActive || isDahAutoActive) && this.gameState.status === GameStatus.DECODING) {
              this.decoder.cancelScheduledDecode();
              this.gameState.status = GameStatus.TYPING;
@@ -402,10 +400,11 @@ class InputHandler {
         if (isDitAutoActive && isDahAutoActive) {
             // --- Iambic Auto Mode ---
             this.gameState.isIambicHandling = true;
+            // If just started Iambic, determine lead paddle based on press time
             if (this.gameState.iambicState === null) {
-                // Determine lead paddle based on press time *only if both are auto*
                 const pressTimeDit = this.pressStartTime.dit || 0;
                 const pressTimeDah = this.pressStartTime.dah || 0;
+                // Set initial state based on which was pressed *last* (higher time)
                 this.gameState.iambicState = (pressTimeDah > pressTimeDit) ? 'dah' : 'dit';
             }
             this._triggerRepeatOrIambicOutput();
@@ -423,16 +422,21 @@ class InputHandler {
             this._triggerRepeatOrIambicOutput();
 
         } else {
-             // Should have been caught by the initial check, but as fallback:
+             // Fallback: Should have been caught by the initial check
              this.gameState.isIambicHandling = false;
              this.gameState.iambicState = null;
-             if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
-                // Schedule decode only if audio isn't busy and no queue
-                if (this.queuedInput === null && !this.audioPlayer.inputToneNode) {
-                    this._scheduleDecodeAfterDelay();
-                }
-             } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
-                 this.gameState.status = GameStatus.LISTENING;
+             // Check if decode should be scheduled if no auto paddles active
+             const isDitActive = this.ditPressed || this.ditKeyPressed;
+             const isDahActive = this.dahPressed || this.dahKeyPressed;
+             if (!isDitActive && !isDahActive) { // Only schedule if NO paddles active
+                 if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
+                     // Schedule decode only if audio isn't busy and no queue
+                     if (this.queuedInput === null && !this.audioPlayer.inputToneNode) {
+                         this._scheduleDecodeAfterDelay();
+                     }
+                 } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                     this.gameState.status = GameStatus.LISTENING;
+                 }
              }
         }
     }
@@ -445,11 +449,19 @@ class InputHandler {
              return; // Don't emit if not in a playing state
         }
 
+        // Start timer if this is the first input
+        if (this.gameState.status === GameStatus.READY) {
+            if (this.gameState.startTimer()) {
+                // Optional: startGameUpdateTimer();
+            }
+            // Move to TYPING state immediately after starting timer
+            this.gameState.status = GameStatus.TYPING;
+        }
+
         this.gameState.addInput(morseChar);
         this.uiManager.updateUserPatternDisplay(this.gameState.currentInputSequence);
 
-        // Call the onInput callback *only for auto mode* as per original design?
-        // Let's call it for both for consistency, main.js can decide what to do.
+        // Call the onInput callback (used by main for potential immediate feedback/checks)
         if (this.callbacks.onInput) {
             this.callbacks.onInput(morseChar);
         }
@@ -459,21 +471,34 @@ class InputHandler {
     /** Triggers the next output in an Auto-Repeat or Iambic sequence. (AUTO MODE ONLY) */
     _triggerRepeatOrIambicOutput() {
         // --- THIS FUNCTION IS NOW ONLY FOR AUTO MODE ---
-        this._clearRepeatOrIambicTimer();
+        this._clearRepeatOrIambicTimer(); // Ensure no duplicates running
 
-        const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
-        const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
-        const elementToSend = this.gameState.iambicState; // Should be 'dit' or 'dah' if auto is active
-
-        // Exit if not in playing state or no auto element determined
-        if (!(this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) || !elementToSend) {
-             this.lastEmitTime = 0; return;
+        // --- Pre-checks ---
+        // 1. Ensure we are in a state where auto input is expected
+        if (!(this.gameState.isPlaying() || this.gameState.status === GameStatus.READY)) {
+            this.lastEmitTime = 0;
+            this._processInputStateChange(); // Re-evaluate state if context changed
+            return;
         }
 
-        // Exit if the required auto paddle(s) are no longer active
-        if (this.gameState.isIambicHandling && (!isDitAutoActive || !isDahAutoActive)) { this._processInputStateChange(); return; }
-        if (!this.gameState.isIambicHandling && elementToSend === 'dit' && !isDitAutoActive) { this._processInputStateChange(); return; }
-        if (!this.gameState.isIambicHandling && elementToSend === 'dah' && !isDahAutoActive) { this._processInputStateChange(); return; }
+        // 2. Determine which element to send ('dit' or 'dah') based on iambic/repeat state
+        const elementToSend = this.gameState.iambicState;
+        if (!elementToSend) { // If state is somehow null, re-evaluate
+             this._processInputStateChange(); return;
+        }
+
+        // 3. Check if the required auto paddle(s) are still active
+        const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
+        const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+        const requiredPaddlesActive =
+            (this.gameState.isIambicHandling && isDitAutoActive && isDahAutoActive) ||
+            (!this.gameState.isIambicHandling && elementToSend === 'dit' && isDitAutoActive) ||
+            (!this.gameState.isIambicHandling && elementToSend === 'dah' && isDahAutoActive);
+
+        if (!requiredPaddlesActive) {
+            this._processInputStateChange(); // Re-evaluate if paddles were released
+            return;
+        }
 
         // --- Timing Check ---
         const now = performance.now();
@@ -481,6 +506,7 @@ class InputHandler {
         const lastElementDurationMs = (this.lastInputTypeGenerated === 'dit' ? this.ditDuration : (this.lastInputTypeGenerated === 'dah' ? this.dahDuration : 0));
         const requiredTimeMs = lastElementDurationMs + this.intraCharGap;
 
+        // If not enough time passed, schedule retry and exit
         if (this.lastEmitTime > 0 && timeSinceLastEmit < requiredTimeMs) {
             const remainingTimeMs = requiredTimeMs - timeSinceLastEmit;
             this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), Math.max(5, remainingTimeMs));
@@ -488,31 +514,32 @@ class InputHandler {
         }
 
         // --- Audio Check ---
+        // If audio is busy, queue the element and exit
         if (this.audioPlayer.inputToneNode) {
              if (this.queuedInput === null) {
                  this.queuedInput = elementToSend;
-                 // console.log(`Auto Audio busy, queued: ${elementToSend}`);
-             } // else { console.log(`Auto Audio busy, queue full. Dropped: ${elementToSend}`); }
-             return; // Return if audio busy
+             }
+             return;
          }
 
          // --- Emit and Play ---
          const morseChar = (elementToSend === 'dit') ? '.' : '-';
-         this._emitInputToSequence(morseChar); // Add to sequence, update UI
+         this._emitInputToSequence(morseChar); // Add to sequence, update UI, start timer if needed
          this.audioPlayer.playInputTone(elementToSend); // Play the tone
          this.lastInputTypeGenerated = elementToSend;
-         this.lastEmitTime = performance.now();
+         this.lastEmitTime = performance.now(); // Record time AFTER playing
 
          // --- Schedule Next Element ---
          const currentElementDurationMs = (elementToSend === 'dit' ? this.ditDuration : this.dahDuration);
          const delayForNextMs = currentElementDurationMs + this.intraCharGap;
 
-         // Toggle state for Iambic
+         // Toggle state for next element in Iambic sequence
          if (this.gameState.isIambicHandling) {
              this.gameState.iambicState = (elementToSend === 'dit') ? 'dah' : 'dit';
          }
+         // else (repeat mode), iambicState remains the same
 
-         // Check if the required auto paddle(s) are *still* active
+         // Check if required paddles are *still* active AFTER emitting
          const stillDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
          const stillDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
          const shouldContinue =
@@ -524,84 +551,91 @@ class InputHandler {
             // Schedule the next trigger
             this.repeatOrIambicTimerId = setTimeout(() => this._triggerRepeatOrIambicOutput(), Math.max(5, delayForNextMs));
          } else {
-            // If required paddles released, re-evaluate state
+            // If required paddles released, re-evaluate state (might schedule decode)
              this._processInputStateChange();
          }
     }
 
-    /** Callback function triggered by AudioPlayer when an input tone finishes playing naturally. (AUTO MODE primarily) */
+    /** Callback function triggered by AudioPlayer when an input tone finishes playing naturally. */
     handleToneEnd() {
-        // --- THIS FUNCTION IS NOW MOSTLY RELEVANT FOR AUTO MODE QUEUE ---
          let processedQueueItem = false;
-         let emittedType = null;
 
          // --- Queue Processing (Auto Mode) ---
          if (this.queuedInput !== null) {
              const typeToProcess = this.queuedInput;
-             const isProcessingDitManual = (typeToProcess === 'dit' && this.isDitManual);
-             const isProcessingDahManual = (typeToProcess === 'dah' && this.isDahManual);
+             const isProcessingPaddleManual = (typeToProcess === 'dit' && this.isDitManual) || (typeToProcess === 'dah' && this.isDahManual);
 
-             // Only process queue if the paddle is in AUTO mode
-             if (!isProcessingDitManual && !isProcessingDahManual) {
+             // Only process queue if the queued item was for an AUTO paddle
+             if (!isProcessingPaddleManual) {
                  this.queuedInput = null; // Clear queue item
-                 // console.log(`Auto Processing queued input: ${typeToProcess}`);
 
-                 const morseChar = (typeToProcess === 'dit') ? '.' : '-';
-                 this._emitInputToSequence(morseChar); // Add to sequence, update UI
-                 this.audioPlayer.playInputTone(typeToProcess); // Play tone
-                 processedQueueItem = true;
-                 emittedType = typeToProcess;
+                 // Re-check if the corresponding AUTO paddle is still active before playing from queue
+                 const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
+                 const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+                 const canPlayFromQueue = (typeToProcess === 'dit' && isDitAutoActive) || (typeToProcess === 'dah' && isDahAutoActive);
 
-                 // Ensure typing state if playing
-                 if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
-                     if (this.gameState.status !== GameStatus.FINISHED && this.gameState.status !== GameStatus.SHOWING_RESULTS) {
-                         this.gameState.status = GameStatus.TYPING;
+                 if (canPlayFromQueue) {
+                     const morseChar = (typeToProcess === 'dit') ? '.' : '-';
+                     this._emitInputToSequence(morseChar); // Add to sequence, update UI
+                     this.audioPlayer.playInputTone(typeToProcess); // Play tone
+                     processedQueueItem = true;
+                     this.lastInputTypeGenerated = typeToProcess; // Track for auto mode timing
+                     this.lastEmitTime = performance.now(); // Update for auto mode timing
+
+                     // Ensure typing state if playing
+                     if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
+                         if (this.gameState.status !== GameStatus.FINISHED && this.gameState.status !== GameStatus.SHOWING_RESULTS) {
+                             this.gameState.status = GameStatus.TYPING;
+                         }
                      }
+                 } else {
+                    // If paddle released before queued item played, just discard
                  }
-                 this.lastInputTypeGenerated = emittedType; // Track for auto mode timing
-                 this.lastEmitTime = performance.now(); // Update for auto mode timing
              } else {
-                  // If the queued item was for a manual paddle, just clear it, don't process via auto logic
-                  console.log(`Manual item '${typeToProcess}' cleared from queue on tone end.`);
+                  // If the queued item was for a manual paddle, just clear it
                   this.queuedInput = null;
              }
          }
 
-         // --- Post-Tone State Evaluation ---
-         // Use timeout to allow release events to potentially fire first
+         // --- Post-Tone State Evaluation (use timeout for stability) ---
          setTimeout(() => {
-             const isDitActive = this.ditPressed || this.ditKeyPressed;
-             const isDahActive = this.dahPressed || this.dahKeyPressed;
-             const isDitAutoActive = isDitActive && !this.isDitManual;
-             const isDahAutoActive = isDahActive && !this.isDahManual;
+             // If we just played something from the queue, the next step (repeat/iambic/decode)
+             // should be scheduled from _triggerRepeatOrIambicOutput or _processInputStateChange.
+             // So, trigger a state re-evaluation.
+             if (processedQueueItem) {
+                 this._processInputStateChange(); // Check if repeat/iambic should continue
+             } else {
+                 // If no queue was processed, check if paddles are released and schedule decode
+                 const isDitActive = this.ditPressed || this.ditKeyPressed;
+                 const isDahActive = this.dahPressed || this.dahKeyPressed;
 
-             if (isDitAutoActive || isDahAutoActive) {
-                  // If an auto paddle is still active, let auto mode logic handle it
-                  this._processInputStateChange();
-             } else if (!isDitActive && !isDahActive) {
-                 // If NO paddles are active (manual or auto)
-                 if (this.gameState.status === GameStatus.TYPING && this.gameState.currentInputSequence) {
-                     // And there's a sequence, schedule decode
-                     this._scheduleDecodeAfterDelay();
-                 } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
-                     // If typing but sequence empty, revert to listening
-                     this.gameState.status = GameStatus.LISTENING;
+                 if (!isDitActive && !isDahActive) { // If NO paddles are active
+                     if (this.gameState.status === GameStatus.TYPING && this.gameState.currentInputSequence) {
+                         // And there's a sequence, schedule decode
+                         this._scheduleDecodeAfterDelay();
+                     } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                         // If typing but sequence empty, revert to listening
+                         this.gameState.status = GameStatus.LISTENING;
+                     }
                  }
-                 // If a manual paddle is active but no auto, do nothing here (release handles it)
+                 // If an auto paddle is still active, let its timer handle the next step
+                 // If a manual paddle is still active, do nothing here (release handles it)
              }
          }, 1); // Small delay
      }
 
 
-    /** Schedules the character decode function after the inter-character gap timeout. (Used by Manual & Auto release/toneEnd) */
+    /** Schedules the character decode function after the inter-character gap timeout. */
      _scheduleDecodeAfterDelay() {
         this.decoder.cancelScheduledDecode(); // Clear any existing timer
 
          // Check if decoding is appropriate in the current state
          const canSchedule = (
-             this.gameState.currentInputSequence &&
-             (this.gameState.status === GameStatus.TYPING || this.gameState.status === GameStatus.LISTENING) && // Can schedule if listening and sequence exists (e.g., manual input)
-             (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX)
+             this.gameState.currentInputSequence && // Must have a sequence to decode
+             (this.gameState.status === GameStatus.TYPING) && // Must be in typing state
+             (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
+             !this.audioPlayer.inputToneNode && // Ensure audio is not playing
+             this.queuedInput === null // Ensure queue is empty
          );
 
          if (!canSchedule) {
@@ -613,7 +647,6 @@ class InputHandler {
          }
 
          // Set state to DECODING and schedule the callback
-         // console.log(`Scheduling decode for sequence: '${this.gameState.currentInputSequence}'`);
          this.gameState.status = GameStatus.DECODING;
 
          this.decoder.scheduleDecode(() => {
@@ -630,11 +663,10 @@ class InputHandler {
                       if(this.gameState.status === GameStatus.DECODING) this.gameState.status = GameStatus.LISTENING;
                  }
              } else {
-                 // If status changed before decode fired, just revert state if still decoding
-                 // console.log(`Decode callback skipped. Status: ${this.gameState.status}, Mode: ${this.gameState.currentMode}`);
+                 // If status changed before decode fired (e.g., new input started), revert if still decoding
                  if(this.gameState.status === GameStatus.DECODING) this.gameState.status = GameStatus.LISTENING;
              }
-             // Reset iambic state after any decode attempt/callback
+             // Reset iambic state after any decode attempt/callback completion
              this.gameState.isIambicHandling = false;
              this.gameState.iambicState = null;
          });
@@ -648,3 +680,17 @@ class InputHandler {
         }
     }
 }
+
+/*
+// --- Usage Example --- (Conceptual)
+// Assuming main.js initializes InputHandler:
+// const inputHandler = new InputHandler(gameState, decoder, audioPlayer, uiManager, callbacks, initialKeys, initialModes);
+//
+// // To update key mappings:
+// inputHandler.updateKeyMappings({ dit: 'e', dah: 'i' });
+//
+// // To update manual mode:
+// inputHandler.updateManualMode({ ditManual: true, dahManual: false });
+//
+// // Event listeners (_bindEvents) handle the rest automatically.
+*/
