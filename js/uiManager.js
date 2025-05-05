@@ -787,7 +787,15 @@ class UIManager {
         // Apply visual changes for theme/hint
         this._applyDarkMode(this.isDarkModeEnabled);
         this._applyHintVisibility(this.isHintVisible, false); // Apply hint visibility without pulse
-
+         // --- Reset Paddle Textures ---
+        console.log("UIManager: Resetting paddle textures...");
+        this.paddleTextures = { dit: null, dah: null }; // Reset internal state
+         // Remove styles from DOM elements
+        [this.ditButton, this.dahButton].forEach(button => {
+            if (button) { button.style.backgroundImage = 'none'; button.classList.remove('has-texture'); }
+        });
+        localStorage.removeItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES); // Remove from storage
+         
         // Save the reset defaults back to storage
         this._saveSettings();
 

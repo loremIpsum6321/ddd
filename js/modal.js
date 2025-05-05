@@ -1,10 +1,16 @@
-/* In file: js/modal.js */
+/* File: js/modal.js */
 /**
- * js/modal.js ++
- * -----------
- * Handles basic modal functionality including showing, hiding,
+ * Purpose: Handles basic modal functionality including showing, hiding,
  * and simple drag-and-drop for the modal window.
- * Refines drag start logic for smoother interaction.
+ *
+ * Version History:
+ * - v1.0 - Initial creation.
+ * - v1.1 - Refines drag start logic for smoother interaction.
+ * - v1.2 - Fixes mobile close button issue by adding touchend listener.
+ * - v1.3 - Fixes centering issue by adjusting initial positioning logic.
+ * - v1.4 - Addresses position jumping and double-grab issues during drag start.
+ * - v1.5 - Further refinement of drag start logic to prevent initial jump.
+ * - v1.6 - Uses requestAnimationFrame in dragStart and disables CSS transitions during drag.
  */
 
 class Modal {
@@ -29,17 +35,15 @@ class Modal {
         // Store initial offset from top-left corner of modal to mouse pointer
         this.offsetX = 0;
         this.offsetY = 0;
-        // Store initial modal position to avoid recalculating bounds constantly
-        this.initialModalX = 0;
-        this.initialModalY = 0;
 
+        this.closeHandler = this.close.bind(this); // Bind close method once
         if (!this.modalElement || !this.openButton || !this.closeButton || !this.headerElement) {
             console.error("Modal initialization failed: One or more elements not found.");
             return;
         }
 
         this._bindEvents();
-        this._setInitialPosition();
+        // Initial position is set on open()
     }
 
     /**
@@ -48,7 +52,11 @@ class Modal {
      */
     _bindEvents() {
         this.openButton.addEventListener('click', this.open.bind(this));
-        this.closeButton.addEventListener('click', this.close.bind(this));
+
+        // Use bound handler for both click and touchend on close button
+        this.closeButton.addEventListener('click', this.closeHandler);
+        this.closeButton.addEventListener('touchend', this.closeHandler);
+
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !this.modalElement.classList.contains('hidden')) {
                 this.close();
@@ -59,13 +67,11 @@ class Modal {
         this.headerElement.addEventListener('mousedown', this._dragStart.bind(this));
         document.addEventListener('mousemove', this._drag.bind(this));
         document.addEventListener('mouseup', this._dragEnd.bind(this));
-        // Prevent mouse drag interfering with text selection inside modal
         this.modalElement.addEventListener('mousedown', (e) => {
              if (e.target !== this.headerElement && !this.headerElement.contains(e.target)) {
-                 e.stopPropagation(); // Prevent drag start if clicking inside content
+                 e.stopPropagation();
              }
         });
-
 
         // Touch events
         this.headerElement.addEventListener('touchstart', this._dragStart.bind(this), { passive: false });
@@ -74,20 +80,15 @@ class Modal {
     }
 
      /**
-     * Sets the initial position (centered) if not already set by dragging.
-     * Ensures transform is cleared if position was set manually.
+     * Sets the initial position (centered).
+     * Forces centering using transform, clearing absolute pixel positions.
      * @private
      */
      _setInitialPosition() {
-         // Only center using transform if left/top are not set by dragging
-         if (!this.modalElement.style.left && !this.modalElement.style.top) {
-            this.modalElement.style.left = '50%';
-            this.modalElement.style.top = '50%';
-            this.modalElement.style.transform = 'translate(-50%, -50%)';
-         } else {
-             // If left/top *are* set (likely by dragging), ensure transform is removed
-             this.modalElement.style.transform = '';
-         }
+         // Ensure any previous pixel positions are cleared
+         this.modalElement.style.left = '50%';
+         this.modalElement.style.top = '50%';
+         this.modalElement.style.transform = 'translate(-50%, -50%)';
      }
 
     /**
@@ -95,7 +96,8 @@ class Modal {
      */
     open() {
         this.modalElement.classList.remove('hidden');
-        this._setInitialPosition(); // Recenter or ensure position on open
+        // Set position immediately after removing 'hidden'
+        this._setInitialPosition();
         if (this.onOpen) {
             this.onOpen();
         }
@@ -106,6 +108,9 @@ class Modal {
      * Closes the modal.
      */
     close() {
+        if (this.modalElement.classList.contains('hidden')) {
+            return;
+        }
         this.modalElement.classList.add('hidden');
         if (this.onClose) {
             this.onClose();
@@ -115,7 +120,6 @@ class Modal {
 
     /**
      * Handles the start of a drag operation (mousedown/touchstart).
-     * Uses pageX/pageY for more robust offset calculation.
      * @param {Event} e - The event object.
      * @private
      */
@@ -128,38 +132,54 @@ class Modal {
         this.isDragging = true;
         this.modalElement.style.cursor = 'grabbing';
         this.headerElement.style.cursor = 'grabbing';
+        // Prevent text selection during drag
+        this.modalElement.style.userSelect = 'none';
+        this.modalElement.style.webkitUserSelect = 'none';
 
-        let pointerX, pointerY;
+        // Add dragging class to disable CSS transitions via CSS rule
+        this.modalElement.classList.add('is-dragging');
+
+        // Store initial pointer coordinates (relative to document)
+        let initialPointerX_page, initialPointerY_page;
         if (e.type === "touchstart") {
-            if (e.touches.length !== 1) {
-                this._dragEnd(e); return;
-            }
-            pointerX = e.touches[0].pageX; // Use pageX for touch
-            pointerY = e.touches[0].pageY; // Use pageY for touch
-            e.preventDefault(); // Prevent page scroll only during touch drag
-        } else {
-            pointerX = e.pageX; // Use pageX for mouse
-            pointerY = e.pageY; // Use pageY for mouse
+            if (e.touches.length !== 1) { this._dragEnd(e); return; }
+            initialPointerX_page = e.touches[0].pageX;
+            initialPointerY_page = e.touches[0].pageY;
+            // We will preventDefault inside rAF if drag truly starts
+        } else { // Mouse event
+            initialPointerX_page = e.pageX;
+            initialPointerY_page = e.pageY;
         }
 
-        // --- Refined Offset Calculation ---
-        // Remove transform to work with pixel values
-        this.modalElement.style.transform = '';
+        // Defer position calculation and style application to the next animation frame
+        // This allows the browser to settle rendering after initial centering styles
+        requestAnimationFrame(() => {
+            // Double-check if still dragging when the frame callback executes
+            if (!this.isDragging) return;
 
-        // Get the current pixel position
-        const rect = this.modalElement.getBoundingClientRect();
-        // Convert viewport-relative rect.left/top to document-relative positions
-        this.initialModalX = rect.left + window.scrollX;
-        this.initialModalY = rect.top + window.scrollY;
+            // --- Inside requestAnimationFrame ---
+            // 1. Get visual position + scroll offset = absolute document position
+            const rect = this.modalElement.getBoundingClientRect();
+            const currentAbsoluteX = rect.left + window.scrollX;
+            const currentAbsoluteY = rect.top + window.scrollY;
 
-        // Calculate offset from the modal's document-relative top-left corner to the pointer
-        this.offsetX = pointerX - this.initialModalX;
-        this.offsetY = pointerY - this.initialModalY;
+            // 2. Calculate offset based on initial PAGE coordinates captured before rAF
+            this.offsetX = initialPointerX_page - currentAbsoluteX;
+            this.offsetY = initialPointerY_page - currentAbsoluteY;
 
-        // Set position explicitly using pixels to fix the jump
-        this.modalElement.style.left = `${this.initialModalX}px`;
-        this.modalElement.style.top = `${this.initialModalY}px`;
-        // --- End Refinement ---
+            // 3. Remove transform
+            this.modalElement.style.transform = '';
+
+            // 4. Set position explicitly using the calculated absolute pixel values
+            this.modalElement.style.left = `${currentAbsoluteX}px`;
+            this.modalElement.style.top = `${currentAbsoluteY}px`;
+
+            // Prevent default scroll/actions *only if* drag really started and we got into rAF
+            if (e.type === "touchstart") {
+               e.preventDefault();
+            }
+            // --- End Inside requestAnimationFrame ---
+        });
     }
 
 
@@ -171,41 +191,42 @@ class Modal {
     _drag(e) {
         if (!this.isDragging) return;
 
-        // Prevent default actions like text selection during mouse drag
-        if (e.type === "mousemove") {
-            e.preventDefault();
-        }
+        // Use Page coordinates for calculating the new position
+        let pointerX_page, pointerY_page;
 
-        let pointerX, pointerY;
         if (e.type === "touchmove") {
-             if (e.touches.length !== 1) {
-                 this._dragEnd(e); return;
-             }
-             pointerX = e.touches[0].pageX; // Use pageX for touch
-             pointerY = e.touches[0].pageY; // Use pageY for touch
-             // preventDefault is handled in dragStart for touch
-        } else {
-            pointerX = e.pageX; // Use pageX for mouse
-            pointerY = e.pageY; // Use pageY for mouse
+             if (e.touches.length !== 1) { this._dragEnd(e); return; }
+             pointerX_page = e.touches[0].pageX;
+             pointerY_page = e.touches[0].pageY;
+             // preventDefault is handled in dragStart's rAF for touch
+        } else { // Mouse event
+             pointerX_page = e.pageX;
+             pointerY_page = e.pageY;
+             e.preventDefault(); // Prevent text selection during mouse drag
         }
 
-        // Calculate new top-left corner position based on pointer and initial offset
-        let newX = pointerX - this.offsetX;
-        let newY = pointerY - this.offsetY;
+        // Calculate the new top-left corner position in document coordinates.
+        // New absolute position = current pointer page coordinates minus the initial offset.
+        let newX = pointerX_page - this.offsetX;
+        let newY = pointerY_page - this.offsetY;
 
-        // Basic boundary check relative to viewport size and scroll position
+
+        // Boundary check relative to document size
         const modalWidth = this.modalElement.offsetWidth;
         const modalHeight = this.modalElement.offsetHeight;
-        const minX = window.scrollX;
-        const minY = window.scrollY;
-        const maxX = window.innerWidth + window.scrollX - modalWidth;
-        const maxY = window.innerHeight + window.scrollY - modalHeight;
+        const minX = 0;
+        const minY = 0;
+        // Ensure we check against the larger of scroll size or window size for max bounds
+        const maxX = Math.max(document.documentElement.scrollWidth, window.innerWidth) - modalWidth;
+        const maxY = Math.max(document.documentElement.scrollHeight, window.innerHeight) - modalHeight;
 
+        // Clamp position within boundaries
         newX = Math.max(minX, Math.min(newX, maxX));
         newY = Math.max(minY, Math.min(newY, maxY));
 
         this._setPosition(newX, newY);
     }
+
 
     /**
      * Handles the end of a drag operation (mouseup/touchend).
@@ -215,8 +236,12 @@ class Modal {
     _dragEnd(e) {
         if (this.isDragging) {
              this.isDragging = false;
+             this.modalElement.classList.remove('is-dragging'); // Remove class
              this.modalElement.style.cursor = ''; // Reset cursor
              this.headerElement.style.cursor = 'move'; // Reset header cursor
+             // Re-enable text selection if needed
+             this.modalElement.style.userSelect = '';
+             this.modalElement.style.webkitUserSelect = '';
          }
     }
 
@@ -231,3 +256,27 @@ class Modal {
         this.modalElement.style.top = `${yPos}px`;
     }
 }
+
+/*
+// --- Usage Example ---
+// Assuming index.html has elements with IDs:
+// 'my-modal', 'open-modal-btn', 'close-modal-btn', 'my-modal-header'
+//
+// In main.js or another script:
+//
+// function handleModalOpen() { console.log('Modal is opening!'); }
+// function handleModalClose() { console.log('Modal is closing!'); }
+//
+// const myModalInstance = new Modal(
+//     'my-modal',           // ID of the modal container
+//     'open-modal-btn',     // ID of the button that opens the modal
+//     'close-modal-btn',    // ID of the button that closes the modal
+//     'my-modal-header',    // ID of the header element used for dragging
+//     handleModalOpen,      // Optional callback function on open
+//     handleModalClose      // Optional callback function on close
+// );
+//
+// // The Modal constructor automatically binds the open button.
+// // The close button and ESC key are also handled internally.
+// // Dragging is handled by interactions with the header element.
+*/

@@ -273,15 +273,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Starts the Sandbox mode with a randomly selected sentence.
-     * Ignores the content of the sandbox input field.
+     * Starts the Sandbox mode.
+     * If the sandbox input field is empty, selects a random sentence from sandboxSentences.js.
+     * Otherwise, uses the sentence provided by the user in the input field.
      */
     function startSandboxPractice() {
         let sentenceText = "ERROR NO SENTENCES LOADED"; // Default error sentence
         let randomSentenceSelected = false;
 
-        // Check if sandboxSentences array exists and has content
-        if (typeof sandboxSentences !== 'undefined' && Array.isArray(sandboxSentences) && sandboxSentences.length > 0) {
+        const userInputSentence = uiManager.getSandboxSentence().trim().toUpperCase();
+
+        if (userInputSentence) {
+            // Use user's input sentence
+            sentenceText = userInputSentence;
+            console.log(`Using user-provided sandbox sentence: "${sentenceText}"`);
+        } else if (typeof sandboxSentences !== 'undefined' && Array.isArray(sandboxSentences) && sandboxSentences.length > 0) {
+            // User input is empty, select a random sentence
             const randomIndex = Math.floor(Math.random() * sandboxSentences.length);
             sentenceText = sandboxSentences[randomIndex].trim().toUpperCase(); // Use trimmed, uppercase version
             randomSentenceSelected = true;
@@ -294,9 +301,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Ensure the chosen sentence (random or error fallback) is not empty
         if (!sentenceText || !sentenceText.trim()) {
-             console.warn("Selected sentence (random or fallback) is empty or whitespace. Using generic fallback.");
-             sentenceText = "SANDBOX FALLBACK"; // Final fallback
-         }
+            console.warn("Selected sentence (random or fallback) is empty or whitespace. Using generic fallback.");
+            sentenceText = "SANDBOX FALLBACK"; // Final fallback
+        }
 
         console.log(`Attempting to start Sandbox with: "${sentenceText}"`);
 
@@ -311,11 +318,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (firstChar !== null) {
             uiManager.highlightCharacter(firstCharIndex, firstChar);
         } else {
-             // This should only happen if the final fallback sentence is somehow invalid
-             console.error("Could not get first character for sandbox sentence.");
-             gameState.status = GameStatus.FINISHED; // Treat as finished if unstartable
-             handleSentenceFinished();
-             return;
+            // This should only happen if the final fallback sentence is somehow invalid
+            console.error("Could not get first character for sandbox sentence.");
+            gameState.status = GameStatus.FINISHED; // Treat as finished if unstartable
+            handleSentenceFinished();
+            return;
         }
         stopGameUpdateTimer();
         console.log("Sandbox ready.");
@@ -818,6 +825,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Sandbox Mode Logic ---
 
+    /**
+     * Updates the Morse code preview in the sandbox UI based on the input field content.
+     * Note: This preview is informational; the input field content is NOT used to start practice.
+     */
     /**
      * Updates the Morse code preview in the sandbox UI based on the input field content.
      * Note: This preview is informational; the input field content is NOT used to start practice.
