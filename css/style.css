@@ -438,17 +438,29 @@ body.input-area-hidden #display-area {
 
 /* Hint Pulse Animation for SVGs */
 @keyframes svg-pulse-animation {
-    0% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Start with default fill */
-    50% { transform: scale(1.1); fill: var(--pattern-pulse-color); } /* Scale up and change to pulse color */
-    100% { transform: scale(1); fill: var(--pattern-svg-fill); } /* Return to default fill */
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.1); }
 }
 
-/* Apply animation to SVGs inside the target container when the class is added by JS */
+/* New: Keyframes for color pulsing based on paddle colors */
+@keyframes hint-dit-color-pulse {
+    0%, 100% { fill: var(--pattern-svg-fill); } /* Default fill */
+    50%      { fill: var(--button-dit-bg); }    /* Dit paddle color at peak */
+}
+
+@keyframes hint-dah-color-pulse {
+    0%, 100% { fill: var(--pattern-svg-fill); } /* Default fill */
+    50%      { fill: var(--button-dah-bg); }    /* Dah paddle color at peak */
+}
+/* Apply ONLY the scale animation here */
 #target-pattern-container svg.hint-svg-pulse {
-    animation: svg-pulse-animation var(--hint-pulse-animation-duration) ease-in-out infinite;
+    animation-name: svg-pulse-animation;
+    animation-duration: var(--hint-pulse-animation-duration);
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
 }
 
-
+/* */
 /* Hint Visibility Styles */
 .hint-toggle { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); background: none; border: none; padding: 0 3px; cursor: pointer; color: var(--hint-toggle-color); line-height: 0; transition: color 0.2s ease; z-index: 5; }
 .hint-toggle:hover { color: var(--hint-toggle-hover-color); }
@@ -457,6 +469,22 @@ body.input-area-hidden #display-area {
 #target-pattern-outer-wrapper:not(.hint-hidden) > .hint-toggle > svg.icon-visible { display: inline-block; }
 #target-pattern-outer-wrapper.hint-hidden > .hint-toggle > svg.icon-hidden { display: inline-block; }
 #target-pattern-outer-wrapper.hint-hidden #target-pattern-container svg { visibility: hidden; } /* Target only hint container */
+
+/* Apply specific color pulse animations to the shapes inside pulsing SVGs */
+/* Make selectors more specific to avoid potential conflicts */
+#target-pattern-container .pattern-dit.hint-svg-pulse circle {
+    animation-name: hint-dit-color-pulse; /* Add color pulse */
+    animation-duration: inherit; /* Use same duration as scale */
+    animation-timing-function: inherit;
+    animation-iteration-count: inherit;
+}
+
+#target-pattern-container .pattern-dah.hint-svg-pulse rect {
+    animation-name: hint-dah-color-pulse; /* Add color pulse */
+    animation-duration: inherit;
+    animation-timing-function: inherit;
+    animation-iteration-count: inherit;
+}
 
 
 /* --- Volume Control Area (Horizontal - Middle) --- */
