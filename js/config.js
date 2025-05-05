@@ -9,9 +9,11 @@
  * - v1.0 - Initial creation.
  * - v1.1 - Changed PADDLE_MODE_DEFAULTS to have Manual=false by default (Auto).
  * - v1.2 (WebDevPro) - Removed DEFAULT_SANDBOX_SENTENCE as it's replaced by js/sandboxSentences.js.
+ * - v1.3 - Added secondary keybindings (ditKeySecondary, dahKeySecondary) defaults and storage keys. Expanded MORSE_MAP.
  */
 
 // --- Morse Code Mapping ---
+// Added more standard punctuation and prosigns. Prosigns map to themselves enclosed in <>.
 const MORSE_MAP = {
     '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
     '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
@@ -21,11 +23,35 @@ const MORSE_MAP = {
     '--..': 'Z',
     '-----': '0', '.----': '1', '..---': '2', '...--': '3', '....-': '4',
     '.....': '5', '-....': '6', '--...': '7', '---..': '8', '----.': '9',
-    '.-.-.-': '.', '--..--': ',', '..--..': '?', '.----.': "'", '-.-.--': '!',
-    '-..-.': '/', '-.--.': '(', '-.--.-': ')', '.-...': '&', '---...': ':',
-    '-.-.-.': ';', '-...-': '=', '.-.-.': '+', '-....-': '-', '..--.-': '_',
-    '.-..-.': '"', '...-..-': '$', '.--.-.': '@'
+    // Punctuation (Original + Added)
+    '.-.-.-': '.', // Period
+    '--..--': ',', // Comma
+    '..--..': '?', // Question Mark
+    '.----.': "'", // Apostrophe (also Single Quote)
+    '-.-.--': '!', // Exclamation Mark
+    '-..-.': '/', // Slash / Fraction Bar
+    '-.--.': '(', // Open Parenthesis
+    '-.--.-': ')', // Close Parenthesis
+    '.-...': '&', // Ampersand
+    '---...': ':', // Colon
+    '-.-.-.': ';', // Semicolon
+    '-...-': '=', // Equals Sign (also Double Hyphen <BT>)
+    '.-.-.': '+', // Plus Sign (also End of Message <AR>)
+    '-....-': '-', // Hyphen / Minus Sign
+    '..--.-': '_', // Underscore
+    '.-..-.': '"', // Quotation Marks
+    '...-..-': '$', // Dollar Sign
+    '.--.-.': '@', // At Sign
+    // Common Prosigns (Mapped to <NAME> for display)
+    '.-.-.': '<AR>',  // End of message (can also be '+')
+    '.-...': '<AS>',  // Wait (can also be '&')
+    '-...-': '<BT>',  // Pause / Separator (double hyphen, can also be '=')
+    '-.-.-': '<KA>',  // Attention / Starting Signal
+    '-.--.': '<KN>',  // Invite specific station (can also be '(')
+    '...-.-': '<SK>',  // End of contact / End of transmission (silent key)
+    '...-.': '<SN>'   // Understood (can also be <VE>)
 };
+
 
 // --- Timing Configuration ---
 const DEFAULT_WPM = 20;
@@ -318,7 +344,9 @@ const INCORRECT_ATTEMPT_PENALTY = 0.1;
 // Default keys if not found in localStorage or on reset
 const KEYBINDING_DEFAULTS = {
     dit: '.',
-    dah: '-'
+    dah: '-',
+    ditSecondary: 'e', // Example default secondary key
+    dahSecondary: 'i'  // Example default secondary key
 };
 
 // Key display mapping for settings UI
@@ -347,8 +375,7 @@ const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
 const DARK_MODE_DEFAULT = true; // Dark mode is OFF by default
 
 // --- Sandbox Mode ---
-// REMOVED: const DEFAULT_SANDBOX_SENTENCE = "HELLO WORLD";
-// Sandbox now uses random sentences from js/sandboxSentences.js
+// REMOVED: DEFAULT_SANDBOX_SENTENCE
 
 // --- Local Storage Keys ---
 const STORAGE_KEY_PREFIX = 'ditDahDash_';
@@ -362,6 +389,8 @@ const STORAGE_KEY_SETTINGS_FREQUENCY = `${STORAGE_KEY_PREFIX}settingsFrequency`;
 const STORAGE_KEY_SETTINGS_VOLUME = `${STORAGE_KEY_PREFIX}settingsVolume`;
 const STORAGE_KEY_SETTINGS_DIT_KEY = `${STORAGE_KEY_PREFIX}settingsDitKey`;
 const STORAGE_KEY_SETTINGS_DAH_KEY = `${STORAGE_KEY_PREFIX}settingsDahKey`;
+const STORAGE_KEY_SETTINGS_DIT_KEY_SECONDARY = `${STORAGE_KEY_PREFIX}settingsDitKeySecondary`; // New
+const STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY = `${STORAGE_KEY_PREFIX}settingsDahKeySecondary`; // New
 const STORAGE_KEY_SETTINGS_HINT_VISIBLE = `${STORAGE_KEY_PREFIX}settingsHintVisible`;
 const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`; // Cosmetic Setting
 // New keys for Manual Mode
@@ -379,6 +408,8 @@ const ALL_SETTINGS_DEFAULTS = {
     hintVisible: HINT_DEFAULT_VISIBLE,
     ditKey: KEYBINDING_DEFAULTS.dit,
     dahKey: KEYBINDING_DEFAULTS.dah,
+    ditKeySecondary: KEYBINDING_DEFAULTS.ditSecondary, // New
+    dahKeySecondary: KEYBINDING_DEFAULTS.dahSecondary, // New
     ditManual: PADDLE_MODE_DEFAULTS.ditManual, // Reflects new default
     dahManual: PADDLE_MODE_DEFAULTS.dahManual, // Reflects new default
     // paddleTextures: { dit: null, dah: null } // Texture is cosmetic, not included in typical reset
@@ -420,7 +451,6 @@ window.MorseConfig = {
     DARK_MODE_DEFAULT,
 
     // Sandbox (Default sentence removed)
-    // DEFAULT_SANDBOX_SENTENCE,
 
     // Combined Defaults Object (for Reset)
     ALL_SETTINGS_DEFAULTS,
@@ -435,6 +465,8 @@ window.MorseConfig = {
     STORAGE_KEY_SETTINGS_VOLUME,
     STORAGE_KEY_SETTINGS_DIT_KEY, STORAGE_KEY_SETTINGS_DAH_KEY,
     STORAGE_KEY_SETTINGS_HINT_VISIBLE,
+    STORAGE_KEY_SETTINGS_DIT_KEY_SECONDARY, // Export secondary keys
+    STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY,
     STORAGE_KEY_PADDLE_TEXTURES, // Cosmetic setting
     STORAGE_KEY_SETTINGS_DIT_MANUAL, // Export manual mode keys
     STORAGE_KEY_SETTINGS_DAH_MANUAL,
@@ -442,21 +474,51 @@ window.MorseConfig = {
 
 /**
  * Function to get the current keybindings, checking localStorage or using defaults.
- * @returns {{dit: string, dah: string}} The current keybindings.
+ * Includes primary and secondary keys.
+ * @returns {{dit: string, dah: string, ditSecondary: string, dahSecondary: string}} The current keybindings.
  */
 window.getCurrentKeybindings = () => {
     let ditKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
     let dahKey = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
+    let ditKeySecondary = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY_SECONDARY);
+    let dahKeySecondary = localStorage.getItem(window.MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY);
+
+    const defaults = window.MorseConfig.KEYBINDING_DEFAULTS;
 
     // Use defaults if localStorage values are null, empty, or invalid
     if (!ditKey || ditKey.trim() === '') {
-        ditKey = window.MorseConfig.KEYBINDING_DEFAULTS.dit;
+        ditKey = defaults.dit;
     }
     if (!dahKey || dahKey.trim() === '') {
-        dahKey = window.MorseConfig.KEYBINDING_DEFAULTS.dah;
+        dahKey = defaults.dah;
+    }
+    if (!ditKeySecondary || ditKeySecondary.trim() === '') {
+        ditKeySecondary = defaults.ditSecondary;
+    }
+    if (!dahKeySecondary || dahKeySecondary.trim() === '') {
+        dahKeySecondary = defaults.dahSecondary;
     }
 
-    return { dit: ditKey, dah: dahKey };
+    // Basic validation to prevent assigning same key across multiple inputs
+    const keys = [ditKey, dahKey, ditKeySecondary, dahKeySecondary].map(k => k.toLowerCase());
+    const keySet = new Set(keys);
+    if (keySet.size < 4) {
+        console.warn("Duplicate key assignments detected during load. Resetting conflicting keys to defaults.");
+        // Simple reset strategy: if duplicates, revert secondaries. More complex logic could be added.
+        // Check secondary dit clash
+        if (keys[2] === keys[0] || keys[2] === keys[1]) {
+            ditKeySecondary = defaults.ditSecondary;
+            keys[2] = ditKeySecondary.toLowerCase(); // Update local array for next check
+            console.log("  - Resetting Secondary Dit Key.");
+        }
+        // Check secondary dah clash (against potentially reset secondary dit too)
+        if (keys[3] === keys[0] || keys[3] === keys[1] || keys[3] === keys[2]) {
+             dahKeySecondary = defaults.dahSecondary;
+             console.log("  - Resetting Secondary Dah Key.");
+        }
+    }
+
+    return { dit: ditKey, dah: dahKey, ditSecondary: ditKeySecondary, dahSecondary: dahKeySecondary };
 };
 
 /**
@@ -473,3 +535,21 @@ window.getCurrentManualMode = () => {
 
     return { ditManual, dahManual };
 };
+
+/*
+// --- Usage Example ---
+// Accessing the Morse map:
+// const morseForA = MorseConfig.MORSE_MAP['.-']; // Returns 'A'
+// const codeForAt = Object.keys(MorseConfig.MORSE_MAP).find(key => MorseConfig.MORSE_MAP[key] === '@'); // Returns '.--.-.'
+//
+// Accessing default WPM:
+// const defaultSpeed = MorseConfig.DEFAULT_WPM;
+//
+// Getting current keybindings (including secondaries):
+// const keys = window.getCurrentKeybindings(); // Returns { dit: '.', dah: '-', ditSecondary: 'e', dahSecondary: 'i' } (or saved values)
+// console.log("Primary Dit Key:", keys.dit);
+// console.log("Secondary Dah Key:", keys.dahSecondary);
+//
+// Getting combined default settings for reset:
+// const defaults = MorseConfig.ALL_SETTINGS_DEFAULTS;
+*/

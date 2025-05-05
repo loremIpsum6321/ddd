@@ -100,7 +100,8 @@
             <div id="level-selection-screen" class="hidden overlay">
                 <button id="level-select-menu-button" class="menu-nav-button" title="Main Menu">☰ Menu</button>
                 <h2>Select Level</h2>
-                <div id="level-list"></div>
+                <div id="level-list">
+                    </div>
             </div>
 
         </div>
@@ -136,11 +137,13 @@
                      <span class="settings-group-label">Key Mapping</span>
                      <div class="key-mapping-row">
                         <label for="dit-key-input">Dit Key:</label>
-                        <input type="text" id="dit-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set Dit key">
+                        <input type="text" id="dit-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set primary Dit key">
+                        <input type="text" id="dit-key-secondary-input" class="key-input" readonly placeholder="Click to set" title="Click to set secondary Dit key">
                      </div>
                      <div class="key-mapping-row">
                         <label for="dah-key-input">Dah Key:</label>
-                        <input type="text" id="dah-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set Dah key">
+                        <input type="text" id="dah-key-input" class="key-input" readonly placeholder="Click to set" title="Click to set primary Dah key">
+                        <input type="text" id="dah-key-secondary-input" class="key-input" readonly placeholder="Click to set" title="Click to set secondary Dah key">
                      </div>
                  </div>
 
@@ -174,7 +177,7 @@
                  </div>
             </div>
         </div>
-    </div>
+        </div>
 
     <script src="js/config.js"></script>
     <script src="js/modal.js"></script>

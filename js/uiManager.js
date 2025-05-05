@@ -5,7 +5,7 @@
  * Manages the user interface, including DOM element references, UI updates,
  * view transitions, settings loading/saving/application, and event binding.
  * Handles feedback display, text rendering, hint visibility, paddle textures,
- * key mapping UI, and manual mode UI.
+ * key mapping UI (primary and secondary), and manual mode UI.
  * - v1.0 - Initial Creation
  * - v1.1 - Added drag/drop for paddle textures, key mapping UI, manual mode UI.
  * - v1.2 - Fixed hint peek logic.
@@ -14,6 +14,7 @@
  * - v1.5 - Added Reset Settings button listener integration.
  * - v1.6 - Improved Hint Peek logic (_handleGlobalKeyDown, _handleGlobalKeyUp, _applyHintVisibility).
  * - v1.7 - Refactored reset logic into handleResetSettings, called by listener.
+ * - v1.8 - Added secondary keybinding inputs and logic.
  */
 class UIManager {
     /**
@@ -91,6 +92,8 @@ class UIManager {
         // Key Mapping Inputs
         this.ditKeyInput = document.getElementById('dit-key-input');
         this.dahKeyInput = document.getElementById('dah-key-input');
+        this.ditKeySecondaryInput = document.getElementById('dit-key-secondary-input');
+        this.dahKeySecondaryInput = document.getElementById('dah-key-secondary-input');
         // Manual Mode Toggles
         this.ditManualModeToggle = document.getElementById('dit-manual-mode-toggle');
         this.dahManualModeToggle = document.getElementById('dah-manual-mode-toggle');
@@ -125,6 +128,8 @@ class UIManager {
         this.currentVolume = MorseConfig.ALL_SETTINGS_DEFAULTS.volume;
         this.currentDitKey = MorseConfig.ALL_SETTINGS_DEFAULTS.ditKey;
         this.currentDahKey = MorseConfig.ALL_SETTINGS_DEFAULTS.dahKey;
+        this.currentDitKeySecondary = MorseConfig.ALL_SETTINGS_DEFAULTS.ditKeySecondary;
+        this.currentDahKeySecondary = MorseConfig.ALL_SETTINGS_DEFAULTS.dahKeySecondary;
         this.isSoundEnabled = MorseConfig.ALL_SETTINGS_DEFAULTS.soundEnabled;
         this.isDarkModeEnabled = MorseConfig.ALL_SETTINGS_DEFAULTS.darkMode;
         this.isHintVisible = MorseConfig.ALL_SETTINGS_DEFAULTS.hintVisible; // User's setting preference
@@ -132,7 +137,7 @@ class UIManager {
         this.isDahManualMode = MorseConfig.ALL_SETTINGS_DEFAULTS.dahManual;
         this.isControlHeld = false; // For hint peek
         this.hintWasVisibleBeforePeek = false; // For hint peek restore
-        this.keyInputCurrentlyListening = null; // 'dit', 'dah', or null
+        this.keyInputCurrentlyListening = null; // 'dit', 'dah', 'ditSecondary', 'dahSecondary', or null
 
         // --- Separate Timeouts for feedback ---
         this._incorrectFlashTimeout = null; // Character flash
@@ -281,7 +286,7 @@ class UIManager {
             this.levelUnlockMessage.style.display = 'none';
         }
 
-        // Update instructions with current key bindings
+        // Update instructions with current primary key bindings
         this.updateResultsInstructionsKeyHints(this.currentDitKey, this.currentDahKey);
 
         // Update paddle labels for Retry/Next
@@ -614,9 +619,12 @@ class UIManager {
     _updateFrequencyDisplay(freq) { if(this.frequencyValueDisplay) this.frequencyValueDisplay.textContent = freq; }
     _updateVolumeSliderUI(volume) { if (this.volumeSlider) this.volumeSlider.value = volume; }
     _updateSpeakerIcon(volume) { const waves = [this.speakerWave1, this.speakerWave2, this.speakerWave3]; waves.forEach(wave => { if (wave) wave.style.display = 'none'; }); if (volume > 0.7 && this.speakerWave3) this.speakerWave3.style.display = 'inline'; if (volume > 0.3 && this.speakerWave2) this.speakerWave2.style.display = 'inline'; if (volume > 0 && this.speakerWave1) this.speakerWave1.style.display = 'inline'; }
+    /** Updates the display value and placeholder for all four key mapping input fields. */
     _updateKeyMappingDisplay() {
         if (this.ditKeyInput) { this.ditKeyInput.value = MorseConfig.getKeyDisplay(this.currentDitKey); this.ditKeyInput.classList.remove('listening'); this.ditKeyInput.placeholder = "Click to set"; }
         if (this.dahKeyInput) { this.dahKeyInput.value = MorseConfig.getKeyDisplay(this.currentDahKey); this.dahKeyInput.classList.remove('listening'); this.dahKeyInput.placeholder = "Click to set"; }
+        if (this.ditKeySecondaryInput) { this.ditKeySecondaryInput.value = MorseConfig.getKeyDisplay(this.currentDitKeySecondary); this.ditKeySecondaryInput.classList.remove('listening'); this.ditKeySecondaryInput.placeholder = "Click to set"; }
+        if (this.dahKeySecondaryInput) { this.dahKeySecondaryInput.value = MorseConfig.getKeyDisplay(this.currentDahKeySecondary); this.dahKeySecondaryInput.classList.remove('listening'); this.dahKeySecondaryInput.placeholder = "Click to set"; }
         this.keyInputCurrentlyListening = null; // Reset listening state
     }
      /** Updates the manual mode toggle checkbox states (Checked=Manual). */
@@ -641,7 +649,7 @@ class UIManager {
         // Dark Mode Toggle
         if (this.darkModeToggle) this.darkModeToggle.checked = this.isDarkModeEnabled;
         // Key Mapping Inputs
-        this._updateKeyMappingDisplay();
+        this._updateKeyMappingDisplay(); // Now updates all four
         // Manual Mode Toggles
         this._updateManualModeToggles();
      }
@@ -659,9 +667,11 @@ class UIManager {
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME, this.currentVolume);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY, this.currentDitKey);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY, this.currentDahKey);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY_SECONDARY, this.currentDitKeySecondary);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY, this.currentDahKeySecondary);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL, this.isDitManualMode);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL, this.isDahManualMode);
-             console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
+             console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditSec: this.currentDitKeySecondary, dahSec: this.currentDahKeySecondary, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
          } catch (e) {
              console.error("Error saving settings:", e);
          }
@@ -679,6 +689,8 @@ class UIManager {
             const savedVolume = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_VOLUME);
             const savedDitKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY);
             const savedDahKey = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY);
+            const savedDitKeySecondary = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_KEY_SECONDARY);
+            const savedDahKeySecondary = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY);
             const savedDitManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
             const savedDahManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
 
@@ -692,25 +704,38 @@ class UIManager {
             this.isDitManualMode = savedDitManual !== null ? JSON.parse(savedDitManual) : MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
             this.isDahManualMode = savedDahManual !== null ? JSON.parse(savedDahManual) : MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
 
-            // Load keys, using defaults if not found or invalid
+            // Load primary keys
             this.currentDitKey = (savedDitKey && savedDitKey.trim() !== '') ? savedDitKey : defaults.ditKey;
             this.currentDahKey = (savedDahKey && savedDahKey.trim() !== '') ? savedDahKey : defaults.dahKey;
+            // Load secondary keys
+            this.currentDitKeySecondary = (savedDitKeySecondary && savedDitKeySecondary.trim() !== '') ? savedDitKeySecondary : defaults.ditKeySecondary;
+            this.currentDahKeySecondary = (savedDahKeySecondary && savedDahKeySecondary.trim() !== '') ? savedDahKeySecondary : defaults.dahKeySecondary;
 
-            // Basic validation to prevent assigning same key to both paddles
-            if (this.currentDitKey === this.currentDahKey) {
-                console.warn(`Loaded keys are identical ('${this.currentDitKey}'). Resetting Dah key to default.`);
-                this.currentDahKey = defaults.dahKey;
-                // If default Dah is ALSO the same as Dit (unlikely but possible), reset Dit too
-                if (this.currentDitKey === this.currentDahKey) {
-                    this.currentDitKey = defaults.ditKey;
+             // Validation: Check for duplicates across all four keys
+            const allKeys = [this.currentDitKey, this.currentDahKey, this.currentDitKeySecondary, this.currentDahKeySecondary].map(k => k.toLowerCase());
+            const keySet = new Set(allKeys);
+            if (keySet.size < 4) {
+                console.warn(`Duplicate key assignments detected during load (${allKeys.join(', ')}). Resetting conflicting keys to defaults.`);
+                // Apply a simple reset: revert secondaries if they clash with primaries or each other
+                // Check secondary dit clash
+                if (allKeys[2] === allKeys[0] || allKeys[2] === allKeys[1]) {
+                    this.currentDitKeySecondary = defaults.ditKeySecondary;
+                    allKeys[2] = this.currentDitKeySecondary.toLowerCase(); // Update local array for next check
+                    console.log("  - Resetting Secondary Dit Key.");
                 }
+                // Check secondary dah clash (against potentially reset secondary dit too)
+                if (allKeys[3] === allKeys[0] || allKeys[3] === allKeys[1] || allKeys[3] === allKeys[2]) {
+                     this.currentDahKeySecondary = defaults.dahKeySecondary;
+                     console.log("  - Resetting Secondary Dah Key.");
+                }
+                // Note: This simplified reset might not cover all edge cases perfectly if defaults themselves clash.
             }
 
             // Clamp frequency and volume to valid ranges
             this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency));
             this.currentVolume = Math.max(0.0, Math.min(1.0, this.currentVolume));
 
-            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
+            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditSec: this.currentDitKeySecondary, dahSec: this.currentDahKeySecondary, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
         } catch (e) {
             console.error("Error loading settings:", e);
             // Fallback to defaults on error
@@ -723,6 +748,8 @@ class UIManager {
             this.currentVolume = defaults.volume;
             this.currentDitKey = defaults.ditKey;
             this.currentDahKey = defaults.dahKey;
+            this.currentDitKeySecondary = defaults.ditKeySecondary;
+            this.currentDahKeySecondary = defaults.dahKeySecondary;
             this.isDitManualMode = defaults.ditManual;
             this.isDahManualMode = defaults.dahManual;
         }
@@ -731,7 +758,7 @@ class UIManager {
 
     /** Visually resets the key mapping input fields based on current internal state. */
     resetKeyMappingInputs() {
-        // Assumes this.currentDitKey and this.currentDahKey are already correctly set (e.g., by handleResetSettings)
+        // Assumes this.currentDitKey etc. are already correctly set (e.g., by handleResetSettings)
         this._updateKeyMappingDisplay();
     }
 
@@ -746,6 +773,8 @@ class UIManager {
         this.currentVolume = defaults.volume;
         this.currentDitKey = defaults.ditKey;
         this.currentDahKey = defaults.dahKey;
+        this.currentDitKeySecondary = defaults.ditKeySecondary;
+        this.currentDahKeySecondary = defaults.dahKeySecondary;
         this.isSoundEnabled = defaults.soundEnabled;
         this.isDarkModeEnabled = defaults.darkMode;
         this.isHintVisible = defaults.hintVisible;
@@ -765,7 +794,7 @@ class UIManager {
         // Explicitly notify main.js about potential changes from reset
         // This ensures other modules (AudioPlayer, InputHandler) get the reset values
         if (this.callbacks && this.callbacks.onResetSettings) {
-            // Trigger a specific callback for settings reset
+            // Trigger a specific callback for settings reset, passing all settings
             this.callbacks.onResetSettings({
                 wpm: this.currentWpm,
                 frequency: this.currentFrequency,
@@ -773,6 +802,8 @@ class UIManager {
                 volume: this.currentVolume,
                 ditKey: this.currentDitKey,
                 dahKey: this.currentDahKey,
+                ditKeySecondary: this.currentDitKeySecondary,
+                dahKeySecondary: this.currentDahKeySecondary,
                 ditManual: this.isDitManualMode,
                 dahManual: this.isDahManualMode,
                 darkMode: this.isDarkModeEnabled,
@@ -894,8 +925,10 @@ class UIManager {
     /** Handles the global keydown event, primarily for hint peeking. */
      _handleGlobalKeyDown(event) {
         const targetElement = event.target;
+        // Check against all 4 key mapping inputs
+        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput ||
+                                     targetElement === this.ditKeySecondaryInput || targetElement === this.dahKeySecondaryInput;
         const isInputFocused = targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA';
-        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput;
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
         const isGameVisible = this.gameUiWrapper && !this.gameUiWrapper.classList.contains('hidden');
 
@@ -975,9 +1008,21 @@ class UIManager {
     // --- End Paddle Texture Drag and Drop ---
 
     // --- Key Mapping Event Handlers ---
+    /** Handles focus event on any of the four key mapping input fields. */
     _handleKeyMappingInputFocus(event) {
         const inputElement = event.target;
-        const type = inputElement.id === 'dit-key-input' ? 'dit' : 'dah';
+        let type = null;
+        switch (inputElement.id) {
+            case 'dit-key-input':
+                type = 'dit'; break;
+            case 'dah-key-input':
+                type = 'dah'; break;
+            case 'dit-key-secondary-input':
+                type = 'ditSecondary'; break;
+            case 'dah-key-secondary-input':
+                type = 'dahSecondary'; break;
+            default: return; // Not a key input we handle
+        }
         // Cancel any other listening input
         if (this.keyInputCurrentlyListening && this.keyInputCurrentlyListening !== type) {
             this._updateKeyMappingDisplay(); // Reset other input visually
@@ -989,42 +1034,77 @@ class UIManager {
         console.log(`Key mapping: Listening for ${type} key...`);
     }
 
+    /** Handles keydown event when a key mapping input field is focused. */
     _handleKeyMappingKeyDown(event) {
         if (!this.keyInputCurrentlyListening) return; // Only act if listening
 
         event.preventDefault(); event.stopPropagation(); // Stop default key actions
 
         const newKey = event.key;
-        const type = this.keyInputCurrentlyListening;
-        const inputElement = (type === 'dit') ? this.ditKeyInput : this.dahKeyInput; // Get reference
+        const type = this.keyInputCurrentlyListening; // e.g., 'dit', 'dah', 'ditSecondary', 'dahSecondary'
+        let inputElement = null;
+        switch (type) {
+             case 'dit': inputElement = this.ditKeyInput; break;
+             case 'dah': inputElement = this.dahKeyInput; break;
+             case 'ditSecondary': inputElement = this.ditKeySecondaryInput; break;
+             case 'dahSecondary': inputElement = this.dahKeySecondaryInput; break;
+             default: return;
+         }
+
         let isValid = true;
         let errorMessage = "";
 
         console.log(`Key mapping: Detected key "${newKey}" for ${type}`);
 
-        // --- Validation ---
+        // --- Validation v2 (Check against all 4) ---
         if (newKey.trim() === '') { isValid = false; errorMessage = "Key cannot be empty."; }
-        // Space is allowed now
-        // else if (newKey === ' ') { isValid = false; errorMessage = "Key cannot be Space."; }
-        else if (type === 'dit' && newKey.toLowerCase() === this.currentDahKey.toLowerCase()) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dah.`; }
-        else if (type === 'dah' && newKey.toLowerCase() === this.currentDitKey.toLowerCase()) { isValid = false; errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to Dit.`; }
-        // Prevent assigning modifier keys alone
-        if (['Control', 'Shift', 'Alt', 'Meta'].includes(newKey)) { isValid = false; errorMessage = "Cannot assign modifier keys alone."; }
+        // Prevent assigning modifier keys alone (unless it's the key itself, which is rare but technically possible)
+        else if (['Control', 'Shift', 'Alt', 'Meta'].includes(newKey) && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
+             isValid = false; errorMessage = "Cannot assign modifier keys alone.";
+        }
+        else {
+             const newKeyLower = newKey.toLowerCase();
+             // Get current assignments, converting to lowercase for comparison
+             const assignments = {
+                 dit: this.currentDitKey.toLowerCase(),
+                 dah: this.currentDahKey.toLowerCase(),
+                 ditSecondary: this.currentDitKeySecondary.toLowerCase(),
+                 dahSecondary: this.currentDahKeySecondary.toLowerCase()
+             };
 
+             for (const otherType in assignments) {
+                 // Check if the new key is assigned to any *other* type
+                 if (otherType !== type && newKeyLower === assignments[otherType]) {
+                     isValid = false;
+                     // Provide a more specific error message
+                     const otherTypeName = otherType.replace('Secondary', ' Secondary').replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()); // Format name e.g. "Dah Secondary"
+                     errorMessage = `Key "${MorseConfig.getKeyDisplay(newKey)}" is already assigned to ${otherTypeName}.`;
+                     break; // Exit loop on first conflict
+                 }
+             }
+        }
 
         // --- Update or Reject ---
         if (isValid) {
             console.log(`Key mapping: Assigning "${newKey}" to ${type}.`);
+            // Assign the new key based on the type we are listening for
             if (type === 'dit') this.currentDitKey = newKey;
-            else this.currentDahKey = newKey;
+            else if (type === 'dah') this.currentDahKey = newKey;
+            else if (type === 'ditSecondary') this.currentDitKeySecondary = newKey;
+            else if (type === 'dahSecondary') this.currentDahKeySecondary = newKey;
 
             this._saveSettings(); // Persist the new key
             this._updateKeyMappingDisplay(); // Update UI, resets listening state
 
-            // Notify main.js about the change
+            // Notify main.js about the change, passing all four keys
              if (this.callbacks && this.callbacks.onKeyMappingChange) {
-                this.callbacks.onKeyMappingChange({ dit: this.currentDitKey, dah: this.currentDahKey });
+                 // Pass all four keys to the callback
+                 this.callbacks.onKeyMappingChange({
+                     dit: this.currentDitKey, dah: this.currentDahKey,
+                     ditSecondary: this.currentDitKeySecondary, dahSecondary: this.currentDahKeySecondary
+                 });
              }
+
              if (inputElement) inputElement.blur(); // Remove focus after successful set
 
         } else {
@@ -1035,9 +1115,19 @@ class UIManager {
         }
     }
 
+    /** Handles blur event on key mapping inputs to cancel listening state. */
     _handleKeyMappingBlur(event) {
-        // If user clicks away while listening, revert the display
-        if (this.keyInputCurrentlyListening && event.target === (this.keyInputCurrentlyListening === 'dit' ? this.ditKeyInput : this.dahKeyInput)) {
+        // Determine which input was blurred
+        let blurredType = null;
+        switch (event.target.id) {
+            case 'dit-key-input': blurredType = 'dit'; break;
+            case 'dah-key-input': blurredType = 'dah'; break;
+            case 'dit-key-secondary-input': blurredType = 'ditSecondary'; break;
+            case 'dah-key-secondary-input': blurredType = 'dahSecondary'; break;
+        }
+
+        // If the blurred element is the one we were actively listening to, cancel.
+        if (this.keyInputCurrentlyListening && this.keyInputCurrentlyListening === blurredType) {
             console.log("Key mapping: Blurred while listening, cancelling.");
             this._updateKeyMappingDisplay(); // Reverts display and resets listening state
         }
@@ -1091,13 +1181,19 @@ class UIManager {
         this.resetSettingsButton?.addEventListener('click', this.handleResetSettings.bind(this));
         // Reset Progress Button
         this.resetProgressButton?.addEventListener('click', () => { if (callbacks.onResetProgress) callbacks.onResetProgress(); });
-        // Key Mapping Inputs
+        // Key Mapping Inputs (Primary and Secondary)
         this.ditKeyInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
         this.dahKeyInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
+        this.ditKeySecondaryInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
+        this.dahKeySecondaryInput?.addEventListener('click', this._handleKeyMappingInputFocus.bind(this));
         this.ditKeyInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
         this.dahKeyInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
+        this.ditKeySecondaryInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
+        this.dahKeySecondaryInput?.addEventListener('keydown', this._handleKeyMappingKeyDown.bind(this));
         this.ditKeyInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this)); // Handle blur to cancel listening
         this.dahKeyInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this));
+        this.ditKeySecondaryInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this));
+        this.dahKeySecondaryInput?.addEventListener('blur', this._handleKeyMappingBlur.bind(this));
         // Manual Mode Toggles (Ensure logic uses checked = true = Manual)
         this.ditManualModeToggle?.addEventListener('change', (e) => { this.isDitManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
         this.dahManualModeToggle?.addEventListener('change', (e) => { this.isDahManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
@@ -1147,6 +1243,8 @@ class UIManager {
     getInitialVolume() { return this.currentVolume; }
     getCurrentDitKey() { return this.currentDitKey; }
     getCurrentDahKey() { return this.currentDahKey; }
+    getCurrentDitKeySecondary() { return this.currentDitKeySecondary; }
+    getCurrentDahKeySecondary() { return this.currentDahKeySecondary; }
     getCurrentDitManualState() { return this.isDitManualMode; } // Checked = true = Manual
     getCurrentDahManualState() { return this.isDahManualMode; } // Checked = true = Manual
     getCurrentManualModeState() { return { ditManual: this.isDitManualMode, dahManual: this.isDahManualMode }; }
@@ -1171,7 +1269,8 @@ document.addEventListener('DOMContentLoaded', () => {
 //
 // uiManager.addEventListeners({
 //   onWpmChange: (newWpm) => { console.log("WPM changed to:", newWpm); },
-//   onResetSettings: (settings) => { console.log("Settings Reset:", settings); },
+//   onResetSettings: (settings) => { console.log("Settings Reset:", settings); }, // Settings obj includes secondary keys
+//   onKeyMappingChange: (mappings) => { console.log("Keys changed:", mappings); }, // Mappings obj includes secondary keys
 //   // ... other callbacks
 // });
 //

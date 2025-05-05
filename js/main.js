@@ -4,12 +4,13 @@
  * ----------
  * Entry point for the Dit-Dah-Dash application.
  * Initializes modules, sets up event listeners, manages UI view transitions,
- * handles settings changes (WPM, frequency, sound, dark mode, keys, manual mode),
+ * handles settings changes (WPM, frequency, sound, dark mode, keys [primary & secondary], manual mode),
  * controls game logic flow, and manages the results screen actions.
  * Version History:
  * - v1.0 - Initial setup.
  * - v1.1 - Modified startSandboxPractice to use default sentence if input is empty.
  * - v1.2 (WebDevPro) - Modified startSandboxPractice to use random sentence from js/sandboxSentences.js.
+ * - v1.3 - Updated settings initialization/application to include secondary keys.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -42,17 +43,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Load settings via UIManager (happens in its constructor)
         // Get initial state AFTER UIManager loads them
-        const initialKeys = {
-            dit: uiManager.getCurrentDitKey(),
-            dah: uiManager.getCurrentDahKey()
-        };
+        // getCurrentKeybindings() now returns all four keys
+        const initialKeys = window.getCurrentKeybindings();
         const initialManualModes = {
             ditManual: uiManager.getCurrentDitManualState(),
             dahManual: uiManager.getCurrentDahManualState()
         };
 
 
-        initializeInputHandler(initialKeys, initialManualModes); // Pass keys & modes
+        initializeInputHandler(initialKeys, initialManualModes); // Pass all four keys & modes
         applyInitialSettings();   // Apply other settings
         setupEventListeners();
         showMainMenu(); // Show main menu initially
@@ -85,13 +84,13 @@ document.addEventListener('DOMContentLoaded', () => {
         applySoundSetting(uiManager.getInitialSoundState());
         applyVolumeSetting(uiManager.getInitialVolume());
         applyManualModeSetting(uiManager.getCurrentManualModeState()); // Apply manual mode
-        // Key mappings applied during InputHandler initialization
+        // Key mappings applied during InputHandler initialization using initialKeys
         // Dark mode & hint visibility applied by UIManager constructor
     }
 
     /**
      * Creates the InputHandler instance.
-     * @param {object} initialKeys - Initial keybindings { dit: string, dah: string }.
+     * @param {object} initialKeys - Initial keybindings { dit, dah, ditSecondary, dahSecondary }.
      * @param {object} initialManualModes - Initial manual mode states { ditManual: boolean, dahManual: boolean }.
      */
     function initializeInputHandler(initialKeys, initialManualModes) {
@@ -106,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 onCharacterDecode: handleCharacterDecode,
                 onResultsInput: handleResultsInput
             },
-            initialKeys, // Pass initial keys
+            initialKeys, // Pass all four initial keys
             initialManualModes // Pass initial manual modes
         );
         console.log("InputHandler initialized.");
@@ -137,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             onVolumeChange: applyVolumeSetting,
             onDarkModeToggle: applyDarkModeSetting,
             onHintToggle: applyHintSetting,
-            onKeyMappingChange: handleKeyMappingChange,
+            onKeyMappingChange: handleKeyMappingChange, // Expects all four keys now
             onManualModeChange: handleManualModeChange, // Callback for manual mode changes
             onResetProgress: resetProgress, // Handles progress reset
             onResetSettings: handleSettingsResetNotification, // Handles notification *after* UIManager resets
@@ -250,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         gameState.startLevelSentence(levelId, sentenceIndex, sentenceText);
-        applyCurrentSettingsToModules(); // Apply WPM, Freq, Volume, Keys, Manual Modes
+        applyCurrentSettingsToModules(); // Apply WPM, Freq, Volume, Keys (all 4), Manual Modes
         uiManager.showGameUI();
         uiManager.renderSentence(sentenceText);
         uiManager.resetStatsDisplay();
@@ -302,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Attempting to start Sandbox with: "${sentenceText}"`);
 
         gameState.startSandboxSentence(sentenceText);
-        applyCurrentSettingsToModules(); // Apply WPM, Freq, Volume, Keys, Manual Modes
+        applyCurrentSettingsToModules(); // Apply WPM, Freq, Volume, Keys (all 4), Manual Modes
         uiManager.showGameUI();
         uiManager.renderSentence(sentenceText); // Render the chosen sentence
         uiManager.resetStatsDisplay();
@@ -592,14 +591,15 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * Handles changes to key mappings from the UIManager settings inputs.
      * Updates the InputHandler.
-     * @param {object} newMappings - { dit: string, dah: string }.
+     * @param {object} newMappings - { dit, dah, ditSecondary, dahSecondary }.
      */
     function handleKeyMappingChange(newMappings) {
         if (inputHandler) {
-            inputHandler.updateKeyMappings(newMappings);
-            console.log(`Setting Applied: Key Mappings = Dit '${newMappings.dit}', Dah '${newMappings.dah}'`);
+            inputHandler.updateKeyMappings(newMappings); // Pass all four keys
+            console.log(`Setting Applied: Key Mappings = Dit '${newMappings.dit}', Dah '${newMappings.dah}', Dit2 '${newMappings.ditSecondary}', Dah2 '${newMappings.dahSecondary}'`);
             // Update results screen instructions dynamically if visible
             if (gameState.status === GameStatus.SHOWING_RESULTS) {
+                // Display only primary keys in the results hint
                 uiManager.updateResultsInstructionsKeyHints(newMappings.dit, newMappings.dah);
             }
         } else {
@@ -632,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * Callback executed after UIManager has reset settings to default.
      * Applies the reset defaults to all relevant modules.
-     * @param {object} resetSettings - The object containing all default settings values.
+     * @param {object} resetSettings - The object containing all default settings values (including secondary keys).
      */
      function handleSettingsResetNotification(resetSettings) {
         console.log("Main.js notified of settings reset. Applying defaults to modules...");
@@ -642,7 +642,11 @@ document.addEventListener('DOMContentLoaded', () => {
         applyVolumeSetting(resetSettings.volume);
         applyDarkModeSetting(resetSettings.darkMode);
         applyHintSetting(resetSettings.hintVisible);
-        handleKeyMappingChange({ dit: resetSettings.ditKey, dah: resetSettings.dahKey });
+        // Pass all four reset keys to the handler
+        handleKeyMappingChange({
+            dit: resetSettings.ditKey, dah: resetSettings.dahKey,
+            ditSecondary: resetSettings.ditKeySecondary, dahSecondary: resetSettings.dahKeySecondary
+        });
         applyManualModeSetting({ ditManual: resetSettings.ditManual, dahManual: resetSettings.dahManual });
         console.log("Main.js: Applied reset settings to modules.");
     }
@@ -650,18 +654,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /**
      * Ensures all modules (Decoder, AudioPlayer, InputHandler) have the latest settings
-     * before starting a game or sandbox session. Reads current settings from UIManager.
+     * before starting a game or sandbox session. Reads current settings from UIManager/Config.
      */
     function applyCurrentSettingsToModules() {
-        // Get current settings state (likely from UIManager which holds loaded state)
-        const currentWpm = uiManager.getInitialWpm(); // Gets the current WPM value from UIManager state
+        // Get current settings state
+        const currentWpm = uiManager.getInitialWpm();
         const currentFreq = uiManager.getInitialFrequency();
         const soundEnabled = uiManager.getInitialSoundState();
         const currentVolume = uiManager.getInitialVolume();
-        const currentKeys = {
-            dit: uiManager.getCurrentDitKey(),
-            dah: uiManager.getCurrentDahKey()
-        };
+        // Get all four keys using the updated function from config.js
+        const currentKeys = window.getCurrentKeybindings();
          const currentManualModes = {
              ditManual: uiManager.getCurrentDitManualState(),
              dahManual: uiManager.getCurrentDahManualState()
@@ -678,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyFrequencySetting(currentFreq);
         applySoundSetting(soundEnabled);
         applyVolumeSetting(currentVolume);
-        // Use specific handlers to ensure InputHandler gets updated
+        // Use specific handlers to ensure InputHandler gets updated with all keys
         handleKeyMappingChange(currentKeys);
         applyManualModeSetting(currentManualModes); // Apply manual mode
 

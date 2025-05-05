@@ -8,10 +8,11 @@
  * Implements direct Morse element generation for 'manual' mode.
  * Triggers discrete audio tones for each generated Morse element.
  * Handles results screen input.
- * Uses dynamically configurable keybindings and paddle modes.
+ * Uses dynamically configurable keybindings (primary and secondary) and paddle modes.
  * v1.0 - Initial creation.
  * v1.1 - Updated paddle mode logic to align with Checked=Manual=true.
  * v1.2 - Minor refactoring of state checks for clarity.
+ * v1.3 - Added support for secondary keybindings and refactored key state management.
  */
 
 class InputHandler {
@@ -23,9 +24,9 @@ class InputHandler {
      * @param {UIManager} uiManager - Handles DOM updates and button feedback.
      * @param {object} callbacks - Functions for input events.
      * @param {function} callbacks.onInput - Callback for dit/dah during gameplay/sandbox (auto mode).
-     * @param {function} callbacks.onCharacterDecode - Callback for character decode attempt in gameplay/sandbox (auto mode).
+     * @param {function} callbacks.onCharacterDecode - Callback for character decode attempt in gameplay/sandbox (manual/auto).
      * @param {function} callbacks.onResultsInput - Callback for dit/dah on results screen.
-     * @param {object} initialKeyMappings - Initial keybindings { dit: 'key', dah: 'key' }
+     * @param {object} initialKeyMappings - Initial keybindings { dit, dah, ditSecondary, dahSecondary }
      * @param {object} initialManualModes - Initial manual mode states { ditManual: boolean, dahManual: boolean }
      */
     constructor(gameState, decoder, audioPlayer, uiManager, callbacks, initialKeyMappings, initialManualModes) {
@@ -42,13 +43,19 @@ class InputHandler {
         this.sandboxInput = document.getElementById('sandbox-input');
         this.settingsModal = document.getElementById('settings-modal');
         this.ditKeyInput = document.getElementById('dit-key-input'); // Settings input
+        this.ditKeySecondaryInput = document.getElementById('dit-key-secondary-input'); // Settings input
         this.dahKeyInput = document.getElementById('dah-key-input'); // Settings input
+        this.dahKeySecondaryInput = document.getElementById('dah-key-secondary-input'); // Settings input
 
-        // Key Mappings (Initialized with defaults or loaded settings)
+        // Key Mappings (Initialized with defaults or loaded settings - now includes secondaries)
+        const defaultKeys = MorseConfig.KEYBINDING_DEFAULTS;
         this.keyMappings = {
-            dit: initialKeyMappings?.dit || MorseConfig.KEYBINDING_DEFAULTS.dit,
-            dah: initialKeyMappings?.dah || MorseConfig.KEYBINDING_DEFAULTS.dah
+            dit: initialKeyMappings?.dit || defaultKeys.dit,
+            dah: initialKeyMappings?.dah || defaultKeys.dah,
+            ditSecondary: initialKeyMappings?.ditSecondary || defaultKeys.ditSecondary,
+            dahSecondary: initialKeyMappings?.dahSecondary || defaultKeys.dahSecondary
         };
+
 
         // Manual Mode State (true = Manual, false = Auto)
         this.isDitManual = initialManualModes?.ditManual ?? MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
@@ -57,8 +64,13 @@ class InputHandler {
         // Input State
         this.ditPressed = false;      // Mouse/Touch state for dit
         this.dahPressed = false;      // Mouse/Touch state for dah
-        this.ditKeyPressed = false;   // Keyboard state for dit
-        this.dahKeyPressed = false;   // Keyboard state for dah
+        // NEW: Keyboard state tracking per key assignment
+        this.keyState = {
+            ditPrimary: false,
+            ditSecondary: false,
+            dahPrimary: false,
+            dahSecondary: false
+        };
 
         // Auto Mode State
         this.pressStartTime = { dit: 0, dah: 0 };
@@ -86,19 +98,28 @@ class InputHandler {
     }
 
     /** Updates the key mappings used by the input handler. */
-    updateKeyMappings(newMappings) {
-        if (newMappings && newMappings.dit && newMappings.dah) {
-             const newDit = newMappings.dit.trim();
-             const newDah = newMappings.dah.trim();
-             if (newDit && newDah && newDit !== newDah) {
-                 this.keyMappings.dit = newDit;
-                 this.keyMappings.dah = newDah;
+    updateKeyMappings(newKeyMappings) {
+        if (newKeyMappings && newKeyMappings.dit && newKeyMappings.dah && newKeyMappings.ditSecondary && newKeyMappings.dahSecondary) {
+             const dit = newKeyMappings.dit.trim();
+             const dah = newKeyMappings.dah.trim();
+             const ditSec = newKeyMappings.ditSecondary.trim();
+             const dahSec = newKeyMappings.dahSecondary.trim();
+
+             // Basic validation: ensure keys are not empty and no duplicates
+             const allKeys = [dit, dah, ditSec, dahSec].map(k => k.toLowerCase());
+             const keySet = new Set(allKeys);
+
+             if (dit && dah && ditSec && dahSec && keySet.size === 4) {
+                 this.keyMappings.dit = dit;
+                 this.keyMappings.dah = dah;
+                 this.keyMappings.ditSecondary = ditSec;
+                 this.keyMappings.dahSecondary = dahSec;
                  console.log("InputHandler Key Mappings Updated:", this.keyMappings);
              } else {
-                 console.warn("InputHandler: Invalid key mapping update ignored.", newMappings);
+                 console.warn("InputHandler: Invalid key mapping update ignored. Keys must be non-empty and unique.", newKeyMappings);
              }
         } else {
-             console.warn("InputHandler: Invalid key mapping object received.", newMappings);
+             console.warn("InputHandler: Invalid key mapping object received.", newKeyMappings);
         }
     }
 
@@ -137,7 +158,7 @@ class InputHandler {
     }
 
     /** Central handler for press events (touch, mouse, key). */
-    _press(type, method) {
+    _press(type, method, specificKey = null) { // specificKey indicates which keyboard key caused the press
         const isGameInputContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                                    (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
@@ -149,132 +170,191 @@ class InputHandler {
         }
 
         // --- State Tracking (Set pressed flag regardless of mode) ---
+        let paddleAlreadyActive = false;
         let stateChanged = false;
+
         if (type === 'dit') {
+             // Check if ANY input for the Dit paddle is already active
+            paddleAlreadyActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
             if ((method === 'touch' || method === 'mouse') && !this.ditPressed) { this.ditPressed = true; stateChanged = true; }
-            else if (method === 'key' && !this.ditKeyPressed) { this.ditKeyPressed = true; stateChanged = true; }
+            else if (method === 'key') {
+                 if (specificKey === 'ditPrimary' && !this.keyState.ditPrimary) { this.keyState.ditPrimary = true; stateChanged = true; }
+                 else if (specificKey === 'ditSecondary' && !this.keyState.ditSecondary) { this.keyState.ditSecondary = true; stateChanged = true; }
+             }
         } else { // dah
+            // Check if ANY input for the Dah paddle is already active
+            paddleAlreadyActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
             if ((method === 'touch' || method === 'mouse') && !this.dahPressed) { this.dahPressed = true; stateChanged = true; }
-            else if (method === 'key' && !this.dahKeyPressed) { this.dahKeyPressed = true; stateChanged = true; }
+            else if (method === 'key') {
+                 if (specificKey === 'dahPrimary' && !this.keyState.dahPrimary) { this.keyState.dahPrimary = true; stateChanged = true; }
+                 else if (specificKey === 'dahSecondary' && !this.keyState.dahSecondary) { this.keyState.dahSecondary = true; stateChanged = true; }
+             }
         }
 
         // Only proceed if state actually changed (prevent repeat events from re-triggering)
         if (!stateChanged) return;
 
-        // Update UI active state
-        const isCurrentlyActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-        this.uiManager.setButtonActive(type, isCurrentlyActive);
+        // Update UI active state if *any* input for this paddle is active
+        const isCurrentlyActive = (type === 'dit') ? (this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary)
+                                                  : (this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary);
 
-        // --- Mode-Specific Logic ---
-        if (isResultsContext) {
-             // Results screen always behaves the same (manual-like)
-             console.log(`Results Action Triggered by: ${type}`);
-             this.audioPlayer.playInputTone(type); // Play tone immediately
-             if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type); // Trigger action immediately
 
-        } else if (isGameInputContext && isPaddleManual) {
-             // --- MANUAL MODE ---
-             // Cancel any pending decode from other modes
-             this.decoder.cancelScheduledDecode();
-             // Stop any ongoing auto-mode tone (from other paddle?)
-             this.audioPlayer.stopInputTone();
-             // Clear auto mode queue
-             this.queuedInput = null;
+        // --- Logic triggered only by the FIRST press for a given paddle type ---
+        if (!paddleAlreadyActive) {
+            // Put code here that should only run when going from inactive to active for the paddle
+            console.log(`${type} paddle ACTIVATED via ${method} ${specificKey || ''}`);
 
-             // Emit Morse element and play sound immediately
-             const morseChar = (type === 'dit') ? '.' : '-';
-             this._emitInputToSequence(morseChar); // Adds to sequence, updates UI
-             this.audioPlayer.playInputTone(type); // Play tone
+            // Update UI button state
+            this.uiManager.setButtonActive(type, isCurrentlyActive);
 
-             // Start game timer if needed
-             if (this.gameState.status === GameStatus.READY) {
-                 if (this.gameState.startTimer()) {
-                    // Optional: startGameUpdateTimer(); // If needed for manual mode UI updates
+            // --- Mode-Specific Logic (Only for FIRST activation) ---
+            if (isResultsContext) {
+                 // Results screen always behaves the same (manual-like)
+                 console.log(`Results Action Triggered by: ${type}`);
+                 this.audioPlayer.playInputTone(type); // Play tone immediately
+                 if (this.callbacks.onResultsInput) this.callbacks.onResultsInput(type); // Trigger action immediately
+
+            } else if (isGameInputContext && isPaddleManual) {
+                 // --- MANUAL MODE ---
+                 // Cancel any pending decode from other modes
+                 this.decoder.cancelScheduledDecode();
+                 // Stop any ongoing auto-mode tone (from other paddle?)
+                 this.audioPlayer.stopInputTone();
+                 // Clear auto mode queue
+                 this.queuedInput = null;
+
+                 // Emit Morse element and play sound immediately
+                 const morseChar = (type === 'dit') ? '.' : '-';
+                 this._emitInputToSequence(morseChar); // Adds to sequence, updates UI
+                 this.audioPlayer.playInputTone(type); // Play tone
+
+                 // Start game timer if needed
+                 if (this.gameState.status === GameStatus.READY) {
+                     if (this.gameState.startTimer()) {
+                        // Optional: startGameUpdateTimer(); // If needed for manual mode UI updates
+                     }
                  }
-             }
-             // Ensure state reflects typing
-             if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
-                 this.gameState.status = GameStatus.TYPING; // Set to typing
-             }
-
-
-        } else if (isGameInputContext && !isPaddleManual) {
-             // --- AUTO MODE ---
-             // Check for audio busy / queueing (specific to auto mode)
-             if (this.audioPlayer.inputToneNode) {
-                 if (this.queuedInput === null) {
-                     this.queuedInput = type;
+                 // Ensure state reflects typing
+                 if (this.gameState.isPlaying() || this.gameState.status === GameStatus.READY) {
+                     this.gameState.status = GameStatus.TYPING; // Set to typing
                  }
-                 // Return here for auto mode if audio is busy
-                 return;
-             }
 
-             // Standard Auto Mode Press Processing
-             const now = performance.now();
-             this.pressStartTime[type] = now;
-             this.decoder.cancelScheduledDecode(); // Cancel pending decode if starting new auto sequence
-             this._processInputStateChange(); // Trigger iambic/repeat logic
+
+            } else if (isGameInputContext && !isPaddleManual) {
+                 // --- AUTO MODE ---
+                 // Check for audio busy / queueing (specific to auto mode)
+                 if (this.audioPlayer.inputToneNode) {
+                     if (this.queuedInput === null) {
+                         this.queuedInput = type;
+                     }
+                     // Return here for auto mode if audio is busy
+                     return; // Don't proceed to state change if audio busy
+                 }
+
+                 // Standard Auto Mode Press Processing
+                 const now = performance.now();
+                 this.pressStartTime[type] = now;
+                 this.decoder.cancelScheduledDecode(); // Cancel pending decode if starting new auto sequence
+                 this._processInputStateChange(); // Trigger iambic/repeat logic
+
+            } else {
+                // Not in a valid context for game input
+            }
 
         } else {
-            // Not in a valid context for game input
+            console.log(`${type} paddle ALREADY ACTIVE, additional press via ${method} ${specificKey || ''}`);
+             // If already active, don't re-trigger core logic, but DO update UI.
+            this.uiManager.setButtonActive(type, isCurrentlyActive);
+            return; // Don't proceed further if paddle was already active
         }
+
     }
 
 
     /** Central handler for release events (touch, mouse, key). */
-    _release(type, method) {
+    _release(type, method, specificKey = null) { // specificKey indicates which keyboard key caused the release
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) &&
                               (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
         const isPaddleManual = (type === 'dit' && this.isDitManual) || (type === 'dah' && this.isDahManual);
 
+
         // --- State Tracking (Set pressed flag regardless of mode) ---
         let stateChanged = false;
+        let otherKeyStillPressed = false; // Check if *other* inputs for this paddle type remain active
+
         if (type === 'dit') {
             if ((method === 'touch' || method === 'mouse') && this.ditPressed) { this.ditPressed = false; stateChanged = true; }
-            else if (method === 'key' && this.ditKeyPressed) { this.ditKeyPressed = false; stateChanged = true; }
+            else if (method === 'key') {
+                 if (specificKey === 'ditPrimary' && this.keyState.ditPrimary) { this.keyState.ditPrimary = false; stateChanged = true; }
+                 else if (specificKey === 'ditSecondary' && this.keyState.ditSecondary) { this.keyState.ditSecondary = false; stateChanged = true; }
+             }
+             // Check if the *other* dit key (or touch/mouse) is still pressed
+            otherKeyStillPressed = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+
         } else { // dah
             if ((method === 'touch' || method === 'mouse') && this.dahPressed) { this.dahPressed = false; stateChanged = true; }
-            else if (method === 'key' && this.dahKeyPressed) { this.dahKeyPressed = false; stateChanged = true; }
+            else if (method === 'key') {
+                 if (specificKey === 'dahPrimary' && this.keyState.dahPrimary) { this.keyState.dahPrimary = false; stateChanged = true; }
+                 else if (specificKey === 'dahSecondary' && this.keyState.dahSecondary) { this.keyState.dahSecondary = false; stateChanged = true; }
+             }
+             // Check if the *other* dah key (or touch/mouse) is still pressed
+            otherKeyStillPressed = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
         }
 
         if (!stateChanged) return; // Ignore if state didn't change
 
-        // Update UI active state
-        const isStillActive = (type === 'dit') ? (this.ditPressed || this.ditKeyPressed) : (this.dahPressed || this.dahKeyPressed);
-        this.uiManager.setButtonActive(type, isStillActive);
+        // Update UI based on whether *any* input for the paddle is still active
+        const isPaddleStillActive = (type === 'dit') ? (this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary)
+                                                   : (this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary);
 
-        // --- Mode-Specific Logic ---
-        if (isResultsContext) {
-            // No action needed on release for results screen
+        // --- Logic triggered only when the LAST input for a paddle type is released ---
+        if (!otherKeyStillPressed) {
+            // Put code here that should only run when the paddle goes from active to inactive
+             console.log(`${type} paddle DEACTIVATED (last input released via ${method} ${specificKey || ''})`);
 
-        } else if (isGameContext && isPaddleManual) {
-            // --- MANUAL MODE ---
-            // Manual paddle released. Schedule decode if NO paddles are active anymore.
-            const isDitPaddleActive = this.ditPressed || this.ditKeyPressed;
-            const isDahPaddleActive = this.dahPressed || this.dahKeyPressed;
+             // Update UI button state
+             this.uiManager.setButtonActive(type, isPaddleStillActive);
 
-            if (!isDitPaddleActive && !isDahPaddleActive) {
-                // Schedule decode only if NO paddles are active (manual or auto)
-                 if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
-                     this._scheduleDecodeAfterDelay();
-                 } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
-                    // If sequence empty, just revert to listening
-                    this.gameState.status = GameStatus.LISTENING;
+             // --- Mode-Specific Logic (Only when paddle becomes inactive) ---
+             if (isResultsContext) {
+                 // No action needed on release for results screen
+
+             } else if (isGameContext && isPaddleManual) {
+                 // --- MANUAL MODE ---
+                 // Manual paddle fully released. Schedule decode if NO paddles (of any type) are active anymore.
+                 const isAnyDitActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+                 const isAnyDahActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
+
+                 if (!isAnyDitActive && !isAnyDahActive) {
+                     // Schedule decode only if NO paddles are active
+                      if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
+                          this._scheduleDecodeAfterDelay();
+                      } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
+                         // If sequence empty, just revert to listening
+                         this.gameState.status = GameStatus.LISTENING;
+                      }
                  }
-            }
 
-        } else if (isGameContext && !isPaddleManual) {
-            // --- AUTO MODE ---
-            // Handle potential queue processing if applicable (audio became free on release)
-            if (this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
-                this.handleToneEnd(); // Process queue if audio free
-            }
-             // Trigger standard auto mode state processing
-             this._processInputStateChange();
+             } else if (isGameContext && !isPaddleManual) {
+                 // --- AUTO MODE ---
+                 // Handle potential queue processing if applicable (audio became free on release)
+                 if (this.queuedInput !== null && !this.audioPlayer.inputToneNode) {
+                     this.handleToneEnd(); // Process queue if audio free
+                 }
+                  // Trigger standard auto mode state processing
+                  this._processInputStateChange();
+             } else {
+                 // Not in a valid context
+             }
+
         } else {
-            // Not in a valid context
+             console.log(`${type} paddle still active, only one input released via ${method} ${specificKey || ''}`);
+             // If other inputs still pressed, don't run core release logic, but DO update UI.
+             this.uiManager.setButtonActive(type, isPaddleStillActive);
+             return; // Don't proceed further if other inputs for the paddle are still active
         }
+
     }
 
 
@@ -306,7 +386,8 @@ class InputHandler {
 
     _handleKeyDown(event) {
         const targetElement = event.target;
-        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput;
+        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput ||
+                                    targetElement === this.ditKeySecondaryInput || targetElement === this.dahKeySecondaryInput;
         const isOtherInputFocused = !isKeyMapInputFocused && (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA');
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
 
@@ -316,25 +397,31 @@ class InputHandler {
 
         const isGameContext = (this.gameState.currentMode === AppMode.GAME || this.gameState.currentMode === AppMode.SANDBOX) && (this.gameState.status === GameStatus.READY || this.gameState.isPlaying());
         const isResultsContext = this.gameState.status === GameStatus.SHOWING_RESULTS;
+        const pressedKey = event.key.toLowerCase(); // Always compare lowercase
+        let keyType = null;
+        let paddleType = null;
 
-        const pressedKey = event.key;
-        const isDitKey = pressedKey.toLowerCase() === this.keyMappings.dit.toLowerCase();
-        const isDahKey = pressedKey.toLowerCase() === this.keyMappings.dah.toLowerCase();
+        // Map the pressed key to its specific type and paddle
+        if (pressedKey === this.keyMappings.dit.toLowerCase()) { keyType = 'ditPrimary'; paddleType = 'dit'; }
+        else if (pressedKey === this.keyMappings.dah.toLowerCase()) { keyType = 'dahPrimary'; paddleType = 'dah'; }
+        else if (pressedKey === this.keyMappings.ditSecondary.toLowerCase()) { keyType = 'ditSecondary'; paddleType = 'dit'; }
+        else if (pressedKey === this.keyMappings.dahSecondary.toLowerCase()) { keyType = 'dahSecondary'; paddleType = 'dah'; }
 
 
-        if ((isGameContext || isResultsContext) && (isDitKey || isDahKey)) {
+        if ((isGameContext || isResultsContext) && keyType) {
             event.preventDefault();
             if (!event.repeat) {
-                if (isDitKey) this._press('dit', 'key');
-                else if (isDahKey) this._press('dah', 'key');
+                this._press(paddleType, 'key', keyType);
             }
         }
     }
 
 
     _handleKeyUp(event) {
+        // Reuse logic from keyDown to check for input focus etc.
         const targetElement = event.target;
-        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput;
+        const isKeyMapInputFocused = targetElement === this.ditKeyInput || targetElement === this.dahKeyInput ||
+                                    targetElement === this.ditKeySecondaryInput || targetElement === this.dahKeySecondaryInput;
         const isOtherInputFocused = !isKeyMapInputFocused && (targetElement === this.playbackInput || targetElement === this.sandboxInput || targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA');
         const isSettingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
 
@@ -342,12 +429,18 @@ class InputHandler {
         if (isOtherInputFocused || (isSettingsOpen && !isKeyMapInputFocused)) return;
         if (isKeyMapInputFocused) return; // Let UIManager handle key mapping capture
 
-        const releasedKey = event.key;
-        const isDitKey = releasedKey.toLowerCase() === this.keyMappings.dit.toLowerCase();
-        const isDahKey = releasedKey.toLowerCase() === this.keyMappings.dah.toLowerCase();
+        const releasedKey = event.key.toLowerCase(); // Always compare lowercase
+        let keyType = null;
+        let paddleType = null;
 
-        if (isDitKey) { event.preventDefault(); this._release('dit', 'key'); }
-        else if (isDahKey) { event.preventDefault(); this._release('dah', 'key'); }
+        // Map the released key to its specific type and paddle
+        if (releasedKey === this.keyMappings.dit.toLowerCase()) { keyType = 'ditPrimary'; paddleType = 'dit'; }
+        else if (releasedKey === this.keyMappings.dah.toLowerCase()) { keyType = 'dahPrimary'; paddleType = 'dah'; }
+        else if (releasedKey === this.keyMappings.ditSecondary.toLowerCase()) { keyType = 'ditSecondary'; paddleType = 'dit'; }
+        else if (releasedKey === this.keyMappings.dahSecondary.toLowerCase()) { keyType = 'dahSecondary'; paddleType = 'dah'; }
+
+        if (keyType) { event.preventDefault(); this._release(paddleType, 'key', keyType); }
+
     }
 
     _handleMousePressStart(event, type) { if (event.button !== 0) return; event.preventDefault(); this._press(type, 'mouse'); }
@@ -363,8 +456,10 @@ class InputHandler {
                                     (this.gameState.status === GameStatus.READY || this.gameState.isPlaying() || this.gameState.status === GameStatus.DECODING);
 
          // Check which paddles are active *and* set to AUTO mode
-         const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
-         const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+         const isDitActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+         const isDahActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
+         const isDitAutoActive = isDitActive && !this.isDitManual;
+         const isDahAutoActive = isDahActive && !this.isDahManual;
 
          // --- Exit Conditions ---
          // 1. Not in game context
@@ -376,9 +471,10 @@ class InputHandler {
             this.gameState.iambicState = null;
 
             // Schedule decode if NO paddles (manual or auto) are active anymore
-            const isDitActive = this.ditPressed || this.ditKeyPressed;
-            const isDahActive = this.dahPressed || this.dahKeyPressed;
-            if (!isDitActive && !isDahActive) {
+             // (Check *all* paddle activity, not just auto)
+             const isAnyDitActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+             const isAnyDahActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
+             if (!isAnyDitActive && !isAnyDahActive) {
                  if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
                     this._scheduleDecodeAfterDelay();
                  } else if (this.gameState.status === GameStatus.TYPING && !this.gameState.currentInputSequence) {
@@ -426,9 +522,10 @@ class InputHandler {
              this.gameState.isIambicHandling = false;
              this.gameState.iambicState = null;
              // Check if decode should be scheduled if no auto paddles active
-             const isDitActive = this.ditPressed || this.ditKeyPressed;
-             const isDahActive = this.dahPressed || this.dahKeyPressed;
-             if (!isDitActive && !isDahActive) { // Only schedule if NO paddles active
+             // Check *all* paddle activity
+             const isAnyDitActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+             const isAnyDahActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
+             if (!isAnyDitActive && !isAnyDahActive) { // Only schedule if NO paddles active
                  if (this.gameState.currentInputSequence && this.gameState.status === GameStatus.TYPING) {
                      // Schedule decode only if audio isn't busy and no queue
                      if (this.queuedInput === null && !this.audioPlayer.inputToneNode) {
@@ -488,8 +585,8 @@ class InputHandler {
         }
 
         // 3. Check if the required auto paddle(s) are still active
-        const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
-        const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+        const isDitAutoActive = (this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary) && !this.isDitManual;
+        const isDahAutoActive = (this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary) && !this.isDahManual;
         const requiredPaddlesActive =
             (this.gameState.isIambicHandling && isDitAutoActive && isDahAutoActive) ||
             (!this.gameState.isIambicHandling && elementToSend === 'dit' && isDitAutoActive) ||
@@ -540,8 +637,8 @@ class InputHandler {
          // else (repeat mode), iambicState remains the same
 
          // Check if required paddles are *still* active AFTER emitting
-         const stillDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
-         const stillDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+         const stillDitAutoActive = (this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary) && !this.isDitManual;
+         const stillDahAutoActive = (this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary) && !this.isDahManual;
          const shouldContinue =
                (this.gameState.isIambicHandling && stillDitAutoActive && stillDahAutoActive) ||
                (!this.gameState.isIambicHandling && this.gameState.iambicState === 'dit' && stillDitAutoActive) ||
@@ -570,8 +667,8 @@ class InputHandler {
                  this.queuedInput = null; // Clear queue item
 
                  // Re-check if the corresponding AUTO paddle is still active before playing from queue
-                 const isDitAutoActive = (this.ditPressed || this.ditKeyPressed) && !this.isDitManual;
-                 const isDahAutoActive = (this.dahPressed || this.dahKeyPressed) && !this.isDahManual;
+                 const isDitAutoActive = (this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary) && !this.isDitManual;
+                 const isDahAutoActive = (this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary) && !this.isDahManual;
                  const canPlayFromQueue = (typeToProcess === 'dit' && isDitAutoActive) || (typeToProcess === 'dah' && isDahAutoActive);
 
                  if (canPlayFromQueue) {
@@ -606,10 +703,11 @@ class InputHandler {
                  this._processInputStateChange(); // Check if repeat/iambic should continue
              } else {
                  // If no queue was processed, check if paddles are released and schedule decode
-                 const isDitActive = this.ditPressed || this.ditKeyPressed;
-                 const isDahActive = this.dahPressed || this.dahKeyPressed;
+                 // Check *all* paddle activity
+                 const isAnyDitActive = this.ditPressed || this.keyState.ditPrimary || this.keyState.ditSecondary;
+                 const isAnyDahActive = this.dahPressed || this.keyState.dahPrimary || this.keyState.dahSecondary;
 
-                 if (!isDitActive && !isDahActive) { // If NO paddles are active
+                 if (!isAnyDitActive && !isAnyDahActive) { // If NO paddles are active
                      if (this.gameState.status === GameStatus.TYPING && this.gameState.currentInputSequence) {
                          // And there's a sequence, schedule decode
                          this._scheduleDecodeAfterDelay();
@@ -687,10 +785,12 @@ class InputHandler {
 // const inputHandler = new InputHandler(gameState, decoder, audioPlayer, uiManager, callbacks, initialKeys, initialModes);
 //
 // // To update key mappings:
-// inputHandler.updateKeyMappings({ dit: 'e', dah: 'i' });
+// inputHandler.updateKeyMappings({ dit: 'e', dah: 'i', ditSecondary: 'u', dahSecondary: 'o' });
 //
 // // To update manual mode:
 // inputHandler.updateManualMode({ ditManual: true, dahManual: false });
 //
 // // Event listeners (_bindEvents) handle the rest automatically.
+// // Keyboard events now check against primary and secondary keys.
+// // Press/Release logic ensures actions trigger only on first down / last up per paddle type.
 */
