@@ -836,12 +836,19 @@ class UIManager {
         if (!buttons[0] || !buttons[1] || !labels[0] || !labels[1]) return;
 
         if (mode === 'results') {
+            // Shared Results Mode setup
             labels[0].textContent = "Retry"; // Dit = Retry
-            labels[1].textContent = "Next";  // Dah = Next
-            const isNextDisabled = (gameMode === AppMode.SANDBOX || !hasNextLevel);
             buttons[0].disabled = false; // Retry always enabled
-            buttons[1].disabled = isNextDisabled; // Disable 'Next' if sandbox or no next level
             buttons.forEach(btn => btn.classList.add('results-label-active'));
+
+            // Mode-Specific Dah setup
+            if (gameMode === AppMode.SANDBOX) {
+                labels[1].textContent = "New Random"; // Dah = New Random in Sandbox
+                buttons[1].disabled = false; // Always enabled in Sandbox results
+            } else { // Game Mode
+                labels[1].textContent = "Next";       // Dah = Next in Game Mode
+                buttons[1].disabled = !hasNextLevel;  // Disable 'Next' if no next level/sentence unlocked
+            }
         } else { // Game mode
             labels[0].textContent = ""; // Clear labels for game/sandbox
             labels[1].textContent = "";

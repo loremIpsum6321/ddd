@@ -490,11 +490,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleResultsInput(type) {
         if (gameState.status !== GameStatus.SHOWING_RESULTS) return;
 
-        // SWAPPED: Dah = Next, Dit = Retry
-        if (type === 'dah') {
-            nextLevel(); // Attempt to go to next level/sentence
-        } else if (type === 'dit') {
-            retryLevel(); // Retry current level/sentence
+        if (type === 'dit') {
+            // Dit always retries the last sentence (Game or Sandbox)
+            retryLevel();
+        } else if (type === 'dah') {
+            // Dah behavior depends on the mode
+            if (gameState.currentMode === AppMode.SANDBOX) {
+                // In Sandbox mode, Dah starts a new random sentence
+                console.log("Results Input: Starting new random Sandbox sentence.");
+                startSandboxPractice();
+            } else {
+                // In Game mode, Dah attempts to go to the next level/sentence
+                nextLevel(); // Attempt to go to next level/sentence
+            }
         }
     }
 
