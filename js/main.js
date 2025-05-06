@@ -11,6 +11,8 @@
  * - v1.1 - Modified startSandboxPractice to use default sentence if input is empty.
  * - v1.2 (WebDevPro) - Modified startSandboxPractice to use random sentence from js/sandboxSentences.js.
  * - v1.3 - Updated settings initialization/application to include secondary keys.
+ * - v1.4 - Added Forward Blur setting application.
+ * - v1.5 - Ensure forward blur effect is updated on character changes.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -84,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applySoundSetting(uiManager.getInitialSoundState());
         applyVolumeSetting(uiManager.getInitialVolume());
         applyManualModeSetting(uiManager.getCurrentManualModeState()); // Apply manual mode
+        applyForwardBlurSetting(uiManager.getInitialForwardBlurState()); // Apply initial forward blur
         // Key mappings applied during InputHandler initialization using initialKeys
         // Dark mode & hint visibility applied by UIManager constructor
     }
@@ -138,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
             onHintToggle: applyHintSetting,
             onKeyMappingChange: handleKeyMappingChange, // Expects all four keys now
             onManualModeChange: handleManualModeChange, // Callback for manual mode changes
+            onForwardBlurToggle: applyForwardBlurSetting, // New: Forward Blur callback
             onResetProgress: resetProgress, // Handles progress reset
             onResetSettings: handleSettingsResetNotification, // Handles notification *after* UIManager resets
         });
@@ -258,6 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const firstChar = gameState.getTargetCharacterRaw();
         if (firstChar !== null) {
             uiManager.highlightCharacter(firstCharIndex, firstChar);
+            // uiManager.updateForwardBlurEffect(); // Apply blur after highlighting - highlightCharacter does this now
         } else if (sentenceText.trim().length === 0){
             console.warn("Starting level with empty or whitespace-only sentence.");
             gameState.status = GameStatus.FINISHED;
@@ -317,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const firstChar = gameState.getTargetCharacterRaw();
         if (firstChar !== null) {
             uiManager.highlightCharacter(firstCharIndex, firstChar);
+            // uiManager.updateForwardBlurEffect(); // Apply blur after highlighting - highlightCharacter does this now
         } else {
             // This should only happen if the final fallback sentence is somehow invalid
             console.error("Could not get first character for sandbox sentence.");
@@ -389,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
                 uiManager.updateTargetPatternDisplay(targetMorse ?? ""); // Re-display hint
+                uiManager.updateForwardBlurEffect(); // Re-apply blur in case state was disrupted
             }
             uiManager.setPatternDisplayState('default'); // Ensure default pattern style
             return;
@@ -400,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (decodedChar && targetChar && decodedChar === targetChar) {
             // --- CORRECT ---
             uiManager.updateCharacterState(gameState.currentCharIndex, 'completed'); // Mark char in sentence
+            // NOTE: updateForwardBlurEffect is called within updateCharacterState when state is 'completed'
             uiManager.setPatternDisplayState('correct'); // Green flash patterns
 
             const moreChars = gameState.moveToNextCharacter(); // Advances index, resets state internally
@@ -409,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const nextCharIndex = gameState.currentCharIndex;
                 const nextCharRaw = gameState.getTargetCharacterRaw(); // Get raw char for highlight
                 if (nextCharRaw !== null) {
-                    uiManager.highlightCharacter(nextCharIndex, nextCharRaw); // Updates hint pattern too
+                    uiManager.highlightCharacter(nextCharIndex, nextCharRaw); // Updates hint pattern & forward blur
                 }
             } else {
                 // --- SENTENCE FINISHED ---
@@ -428,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetChar !== null) {
                 const targetMorse = decoder.encodeCharacter(targetChar);
                 uiManager.updateTargetPatternDisplay(targetMorse ?? "");
+                uiManager.updateForwardBlurEffect(); // Re-apply blur after incorrect attempt
             } else {
                 uiManager.updateTargetPatternDisplay(""); // Clear hint if no target (shouldn't happen here)
             }
@@ -474,6 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hasNextLevelOption = false;
         }
 
+        uiManager.updateForwardBlurEffect(); // Clear blur on results screen
         uiManager.showResultsScreen(scores, unlockedNextLevelId, hasNextLevelOption, gameState.currentMode);
         // gameState.status is set to SHOWING_RESULTS *inside* showResultsScreen now (implicitly)
         // but we should explicitly set it here for consistency
@@ -595,6 +605,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
+     * Applies the forward blur setting (handled visually by UIManager).
+     * @param {boolean} isEnabled - True to enable the effect.
+     */
+    function applyForwardBlurSetting(isEnabled) {
+        console.log(`Setting Applied: Forward Blur = ${isEnabled}`);
+        // UI class/state is toggled directly within UIManager's _applyForwardBlurSetting
+    }
+    /**
      * Applies the hint visibility setting (handled visually by UIManager).
      * @param {boolean} isVisible - True to show hint by default, false to hide.
      */
@@ -657,6 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyVolumeSetting(resetSettings.volume);
         applyDarkModeSetting(resetSettings.darkMode);
         applyHintSetting(resetSettings.hintVisible);
+        applyForwardBlurSetting(resetSettings.forwardBlur); // New: Apply blur reset
         // Pass all four reset keys to the handler
         handleKeyMappingChange({
             dit: resetSettings.ditKey, dah: resetSettings.dahKey,
@@ -677,6 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentFreq = uiManager.getInitialFrequency();
         const soundEnabled = uiManager.getInitialSoundState();
         const currentVolume = uiManager.getInitialVolume();
+        const isBlurEnabled = uiManager.getInitialForwardBlurState(); // New: Get blur state
         // Get all four keys using the updated function from config.js
         const currentKeys = window.getCurrentKeybindings();
          const currentManualModes = {
@@ -695,6 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyFrequencySetting(currentFreq);
         applySoundSetting(soundEnabled);
         applyVolumeSetting(currentVolume);
+        applyForwardBlurSetting(isBlurEnabled); // New: Apply blur setting
         // Use specific handlers to ensure InputHandler gets updated with all keys
         handleKeyMappingChange(currentKeys);
         applyManualModeSetting(currentManualModes); // Apply manual mode
@@ -734,6 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const firstCharIndex = gameState.currentCharIndex;
             const firstChar = gameState.getTargetCharacterRaw();
             if (firstChar !== null) uiManager.highlightCharacter(firstCharIndex, firstChar);
+            uiManager.updateForwardBlurEffect(); // Ensure blur is updated on retry
             stopGameUpdateTimer();
             console.log("Sandbox retry ready.");
 

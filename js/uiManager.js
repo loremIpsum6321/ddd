@@ -8,6 +8,7 @@
  * key mapping UI (primary and secondary), and manual mode UI.
  * - v1.0 - Initial Creation
  * - v1.1 - Added drag/drop for paddle textures, key mapping UI, manual mode UI.
+ * - v1.1.1 - Added Forward Blur setting UI and logic.
  * - v1.2 - Fixed hint peek logic.
  * - v1.3 - Updated resetToDefaults to use combined defaults and not touch progress keys.
  * - v1.4 - Updated paddle mode toggle logic to reflect Checked=Manual.
@@ -97,6 +98,7 @@ class UIManager {
         // Manual Mode Toggles
         this.ditManualModeToggle = document.getElementById('dit-manual-mode-toggle');
         this.dahManualModeToggle = document.getElementById('dah-manual-mode-toggle');
+        this.forwardBlurToggle = document.getElementById('forward-blur-toggle'); // New: Forward Blur Toggle
 
 
         // Overlay Screens
@@ -135,6 +137,7 @@ class UIManager {
         this.isHintVisible = MorseConfig.ALL_SETTINGS_DEFAULTS.hintVisible; // User's setting preference
         this.isDitManualMode = MorseConfig.ALL_SETTINGS_DEFAULTS.ditManual;
         this.isDahManualMode = MorseConfig.ALL_SETTINGS_DEFAULTS.dahManual;
+        this.isForwardBlurEnabled = MorseConfig.ALL_SETTINGS_DEFAULTS.forwardBlur; // New: Forward Blur State
         this.isControlHeld = false; // For hint peek
         this.hintWasVisibleBeforePeek = false; // For hint peek restore
         this.keyInputCurrentlyListening = null; // 'dit', 'dah', 'ditSecondary', 'dahSecondary', or null
@@ -161,6 +164,7 @@ class UIManager {
         this._updateAllSettingsDisplays(); // Update UI based on loaded settings
         this._applyDarkMode(this.isDarkModeEnabled);
         this._applyHintVisibility(this.isHintVisible, false); // Apply initial hint state without pulse
+        this._applyForwardBlurSetting(this.isForwardBlurEnabled); // Apply initial blur setting
 
         this._addGlobalEventListeners();
         this._addDragDropListeners();
@@ -456,6 +460,7 @@ class UIManager {
         this.updateUserPatternDisplay(""); // Clear user pattern
         this.setPatternDisplayState('default'); // Reset pattern feedback state
         this._adjustTextDisplayFontSize(); // Fit text vertically
+        this.updateForwardBlurEffect(); // Apply initial blur effect
         this._stopHintPulse("New Sentence Rendered"); // Stop any previous pulse
     }
 
@@ -528,6 +533,7 @@ class UIManager {
                 this._centerCurrentCharacterHorizontally(charSpan);
             } else if (state === 'completed') {
                 this._stopHintPulse("Character Completed"); // Stop hint pulse on correct char
+                this.updateForwardBlurEffect(); // Update blur as current index changes
             }
         }
     }
@@ -559,6 +565,8 @@ class UIManager {
 
         this.updateUserPatternDisplay(""); // Clear user input display
         this.setPatternDisplayState('default'); // Reset pattern feedback visuals
+
+        this.updateForwardBlurEffect(); // Apply blur effect based on new position
 
         // Start hint pulse timer if hint is visible and there's a sequence to show
         // AND peek is not active
@@ -652,6 +660,7 @@ class UIManager {
         this._updateKeyMappingDisplay(); // Now updates all four
         // Manual Mode Toggles
         this._updateManualModeToggles();
+        if (this.forwardBlurToggle) this.forwardBlurToggle.checked = this.isForwardBlurEnabled; // New: Update blur toggle
      }
 
 
@@ -671,6 +680,7 @@ class UIManager {
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY, this.currentDahKeySecondary);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL, this.isDitManualMode);
              localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL, this.isDahManualMode);
+             localStorage.setItem(MorseConfig.STORAGE_KEY_SETTINGS_FORWARD_BLUR, this.isForwardBlurEnabled); // New
              console.log("Settings Saved:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditSec: this.currentDitKeySecondary, dahSec: this.currentDahKeySecondary, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
          } catch (e) {
              console.error("Error saving settings:", e);
@@ -693,6 +703,7 @@ class UIManager {
             const savedDahKeySecondary = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_KEY_SECONDARY);
             const savedDitManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DIT_MANUAL);
             const savedDahManual = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_DAH_MANUAL);
+            const savedForwardBlur = localStorage.getItem(MorseConfig.STORAGE_KEY_SETTINGS_FORWARD_BLUR); // New
 
             this.currentWpm = savedWpm !== null ? parseInt(savedWpm, 10) : defaults.wpm;
             this.isSoundEnabled = savedSound !== null ? JSON.parse(savedSound) : defaults.soundEnabled;
@@ -703,6 +714,7 @@ class UIManager {
             // Use updated PADDLE_MODE_DEFAULTS from config.js
             this.isDitManualMode = savedDitManual !== null ? JSON.parse(savedDitManual) : MorseConfig.PADDLE_MODE_DEFAULTS.ditManual;
             this.isDahManualMode = savedDahManual !== null ? JSON.parse(savedDahManual) : MorseConfig.PADDLE_MODE_DEFAULTS.dahManual;
+            this.isForwardBlurEnabled = savedForwardBlur !== null ? JSON.parse(savedForwardBlur) : defaults.forwardBlur; // New
 
             // Load primary keys
             this.currentDitKey = (savedDitKey && savedDitKey.trim() !== '') ? savedDitKey : defaults.ditKey;
@@ -735,7 +747,7 @@ class UIManager {
             this.currentFrequency = Math.max(MorseConfig.AUDIO_MIN_FREQUENCY, Math.min(MorseConfig.AUDIO_MAX_FREQUENCY, this.currentFrequency));
             this.currentVolume = Math.max(0.0, Math.min(1.0, this.currentVolume));
 
-            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditSec: this.currentDitKeySecondary, dahSec: this.currentDahKeySecondary, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode });
+            console.log("Settings Loaded:", { wpm: this.currentWpm, sound: this.isSoundEnabled, dark: this.isDarkModeEnabled, freq: this.currentFrequency, hint: this.isHintVisible, volume: this.currentVolume, ditKey: this.currentDitKey, dahKey: this.currentDahKey, ditSec: this.currentDitKeySecondary, dahSec: this.currentDahKeySecondary, ditManual: this.isDitManualMode, dahManual: this.isDahManualMode, forwardBlur: this.isForwardBlurEnabled }); // New
         } catch (e) {
             console.error("Error loading settings:", e);
             // Fallback to defaults on error
@@ -752,6 +764,7 @@ class UIManager {
             this.currentDahKeySecondary = defaults.dahKeySecondary;
             this.isDitManualMode = defaults.ditManual;
             this.isDahManualMode = defaults.dahManual;
+            this.isForwardBlurEnabled = defaults.forwardBlur; // New
         }
         // UI elements updated in constructor via _updateAllSettingsDisplays()
     }
@@ -780,11 +793,13 @@ class UIManager {
         this.isHintVisible = defaults.hintVisible;
         this.isDitManualMode = defaults.ditManual;
         this.isDahManualMode = defaults.dahManual;
+        this.isForwardBlurEnabled = defaults.forwardBlur; // New: Reset blur state
 
         // Update all associated UI Elements
         this._updateAllSettingsDisplays();
 
         // Apply visual changes for theme/hint
+        this._applyForwardBlurSetting(this.isForwardBlurEnabled); // New: Apply blur setting
         this._applyDarkMode(this.isDarkModeEnabled);
         this._applyHintVisibility(this.isHintVisible, false); // Apply hint visibility without pulse
          // --- Reset Paddle Textures ---
@@ -795,7 +810,7 @@ class UIManager {
             if (button) { button.style.backgroundImage = 'none'; button.classList.remove('has-texture'); }
         });
         localStorage.removeItem(MorseConfig.STORAGE_KEY_PADDLE_TEXTURES); // Remove from storage
-         
+
         // Save the reset defaults back to storage
         this._saveSettings();
 
@@ -815,7 +830,8 @@ class UIManager {
                 ditManual: this.isDitManualMode,
                 dahManual: this.isDahManualMode,
                 darkMode: this.isDarkModeEnabled,
-                hintVisible: this.isHintVisible
+                hintVisible: this.isHintVisible,
+                forwardBlur: this.isForwardBlurEnabled // New: Include blur in reset notification
             });
         } else {
              console.warn("UIManager: onResetSettings callback not defined in main.js");
@@ -864,6 +880,54 @@ class UIManager {
 
     // --- Theme & Hint Visibility ---
     _applyDarkMode(enable) { this.bodyElement.classList.toggle('dark-mode', enable); }
+
+    /** Visually applies the forward blur setting by toggling a body class. */
+    _applyForwardBlurSetting(enable) {
+        this.bodyElement?.classList.toggle('forward-blur-active', enable);
+        this.updateForwardBlurEffect(); // Immediately update the effect on spans
+    }
+
+    /**
+     * Updates the blur effect on upcoming characters based on the current index
+     * and whether the blur setting is enabled.
+     */
+    updateForwardBlurEffect() {
+        if (!this.textDisplay || !window.morseGameState) {
+            return; // Need display and game state
+        }
+
+        const currentCharIndex = window.morseGameState.currentCharIndex;
+        const spans = this.textDisplay.querySelectorAll('.char');
+
+        // If setting is disabled, remove all blur classes
+        if (!this.isForwardBlurEnabled) {
+            spans.forEach(span => {
+                span.className = span.className.replace(/\s?forward-blur-\d/g, '');
+            });
+            return;
+        }
+
+        // Apply blur based on distance
+        spans.forEach(span => {
+            // Remove any existing blur class first
+            span.className = span.className.replace(/\s?forward-blur-\d/g, '');
+
+            const spanIndex = parseInt(span.dataset.index, 10);
+            // Ignore non-indexed, current, or past chars. Also ignore spaces.
+            if (isNaN(spanIndex) || spanIndex <= currentCharIndex || span.classList.contains('space')) {
+                return;
+            }
+
+            const distance = spanIndex - currentCharIndex;
+            // Calculate blur level (e.g., increasing every 2 chars, max level 5)
+            const MAX_BLUR_LEVEL = 5;
+            const blurLevel = Math.min(MAX_BLUR_LEVEL, Math.ceil(distance / 2));
+
+            if (blurLevel > 0) {
+                span.classList.add(`forward-blur-${blurLevel}`);
+            }
+        });
+    }
 
     /**
      * Applies the visual hint visibility state, respecting the peek state (isControlHeld).
@@ -1213,6 +1277,8 @@ class UIManager {
         this.ditManualModeToggle?.addEventListener('change', (e) => { this.isDitManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
         this.dahManualModeToggle?.addEventListener('change', (e) => { this.isDahManualMode = e.target.checked; this._saveSettings(); if (callbacks.onManualModeChange) callbacks.onManualModeChange(this.getCurrentManualModeState()); });
         // --- End Settings Modal Listeners ---
+        // New: Forward Blur Toggle
+        this.forwardBlurToggle?.addEventListener('change', (e) => { this.isForwardBlurEnabled = e.target.checked; this._applyForwardBlurSetting(this.isForwardBlurEnabled); this._saveSettings(); if (callbacks.onForwardBlurToggle) callbacks.onForwardBlurToggle(this.isForwardBlurEnabled); });
 
         // Volume Slider (Game UI)
          this.volumeSlider?.addEventListener('input', (e) => { const newVolume = parseFloat(e.target.value); this._updateSpeakerIcon(newVolume); if (callbacks.onVolumeChange) callbacks.onVolumeChange(newVolume, false); /* false = not final change */ });
@@ -1262,6 +1328,7 @@ class UIManager {
     getCurrentDahKeySecondary() { return this.currentDahKeySecondary; }
     getCurrentDitManualState() { return this.isDitManualMode; } // Checked = true = Manual
     getCurrentDahManualState() { return this.isDahManualMode; } // Checked = true = Manual
+    getInitialForwardBlurState() { return this.isForwardBlurEnabled; } // New Getter
     getCurrentManualModeState() { return { ditManual: this.isDitManualMode, dahManual: this.isDahManualMode }; }
     getPlaybackSentence() { return this.playbackInput ? this.playbackInput.value : ""; }
     getSandboxSentence() { return this.sandboxInput ? this.sandboxInput.value : ""; }
@@ -1286,6 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
 //   onWpmChange: (newWpm) => { console.log("WPM changed to:", newWpm); },
 //   onResetSettings: (settings) => { console.log("Settings Reset:", settings); }, // Settings obj includes secondary keys
 //   onKeyMappingChange: (mappings) => { console.log("Keys changed:", mappings); }, // Mappings obj includes secondary keys
+//   onForwardBlurToggle: (enabled) => { console.log("Forward Blur Toggled:", enabled); }, // Example for new setting
 //   // ... other callbacks
 // });
 //

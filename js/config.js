@@ -373,7 +373,7 @@ const PADDLE_MODE_DEFAULTS = {
 const INCORRECT_FLASH_DURATION = 300; // ms for incorrect feedback flash
 const HINT_DEFAULT_VISIBLE = true; // Hint is visible by default for new users
 const DARK_MODE_DEFAULT = true; // Dark mode is OFF by default
-
+const FORWARD_BLUR_DEFAULT = false; // Forward blur effect is OFF by default
 // --- Sandbox Mode ---
 // REMOVED: DEFAULT_SANDBOX_SENTENCE
 
@@ -396,7 +396,7 @@ const STORAGE_KEY_PADDLE_TEXTURES = `${STORAGE_KEY_PREFIX}paddleTextures`; // Co
 // New keys for Manual Mode
 const STORAGE_KEY_SETTINGS_DIT_MANUAL = `${STORAGE_KEY_PREFIX}settingsDitManual`;
 const STORAGE_KEY_SETTINGS_DAH_MANUAL = `${STORAGE_KEY_PREFIX}settingsDahManual`;
-
+const STORAGE_KEY_SETTINGS_FORWARD_BLUR = `${STORAGE_KEY_PREFIX}settingsForwardBlur`; // New
 
 // --- Combine ALL Default Settings into one object for easier Reset ---
 const ALL_SETTINGS_DEFAULTS = {
@@ -412,6 +412,7 @@ const ALL_SETTINGS_DEFAULTS = {
     dahKeySecondary: KEYBINDING_DEFAULTS.dahSecondary, // New
     ditManual: PADDLE_MODE_DEFAULTS.ditManual, // Reflects new default
     dahManual: PADDLE_MODE_DEFAULTS.dahManual, // Reflects new default
+    forwardBlur: FORWARD_BLUR_DEFAULT, // New
     // paddleTextures: { dit: null, dah: null } // Texture is cosmetic, not included in typical reset
 };
 
@@ -448,6 +449,7 @@ window.MorseConfig = {
     // UI Feedback & Defaults
     INCORRECT_FLASH_DURATION,
     HINT_DEFAULT_VISIBLE,
+    FORWARD_BLUR_DEFAULT, // New
     DARK_MODE_DEFAULT,
 
     // Sandbox (Default sentence removed)
@@ -470,6 +472,7 @@ window.MorseConfig = {
     STORAGE_KEY_PADDLE_TEXTURES, // Cosmetic setting
     STORAGE_KEY_SETTINGS_DIT_MANUAL, // Export manual mode keys
     STORAGE_KEY_SETTINGS_DAH_MANUAL,
+    STORAGE_KEY_SETTINGS_FORWARD_BLUR, // New
 };
 
 /**
